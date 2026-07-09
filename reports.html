@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="page-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <h2>FitnessGym</h2>
+                <p>Member Control</p>
+            </div>
+
+            <nav class="nav-links">
+                <a href="dashboard.html">Dashboard</a>
+                <a href="members.html">Members</a>
+                <a href="payments.html">Payments</a>
+                <a href="reports.html" class="active">Reports</a>
+            </nav>
+
+            <a href="#" class="logout-link">Logout</a>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">Gym management</p>
+                    <h1>Reports</h1>
+                </div>
+
+                <div class="report-actions">
+                    <button type="button" class="secondary-btn">Export PDF</button>
+                    <button type="button" class="secondary-btn">Export Excel</button>
+                    <button type="button" class="primary-btn">Print Report</button>
+                </div>
+            </header>
+
+            <section class="stats-grid">
+                <article class="stat-card">
+                    <h3>Total Revenue</h3>
+                    <p class="stat-value">₱120,450</p>
+                </article>
+                <article class="stat-card">
+                    <h3>Monthly Revenue</h3>
+                    <p class="stat-value">₱35,900</p>
+                </article>
+                <article class="stat-card">
+                    <h3>Active Members</h3>
+                    <p class="stat-value">412</p>
+                </article>
+                <article class="stat-card">
+                    <h3>Total Payments</h3>
+                    <p class="stat-value">1,240</p>
+                </article>
+            </section>
+
+            <section class="panel">
+                <div class="panel-header">
+                    <h2>Report filters</h2>
+                </div>
+
+                <div class="panel-toolbar-new">
+                    <div class="toolbar-left">
+                        <div class="toolbar-group">
+                            <label for="fromDate">From</label>
+                            <input id="fromDate" type="date">
+                        </div>
+                        <div class="toolbar-group">
+                            <label for="toDate">To</label>
+                            <input id="toDate" type="date">
+                        </div>
+                    </div>
+
+                    <div class="toolbar-right">
+                        <div class="toolbar-group-inline">
+                            <label for="reportType">Report Type</label>
+                            <select id="reportType" class="select-inline">
+                                <option value="membership">Membership Report</option>
+                                <option value="payment">Payment Report</option>
+                                <option value="revenue">Revenue Report</option>
+                            </select>
+                        </div>
+
+                        <div class="toolbar-group-inline">
+                            <label for="planFilter">Membership Plan</label>
+                            <select id="planFilter" class="select-inline">
+                                <option value="all">All</option>
+                                <option value="basic">Basic</option>
+                                <option value="standard">Standard</option>
+                                <option value="premium">Premium</option>
+                            </select>
+                        </div>
+
+                        <div class="toolbar-group-inline">
+                            <label for="statusFilter">Payment Status</label>
+                            <select id="statusFilter" class="select-inline">
+                                <option value="all">All</option>
+                                <option value="paid">Paid</option>
+                                <option value="pending">Pending</option>
+                                <option value="overdue">Overdue</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <article class="chart-card">
+                        <div class="chart-card-header">
+                            <h3>Monthly Revenue</h3>
+                        </div>
+                        <div class="chart-placeholder chart-bar">
+                            <div class="bar-label">Jan</div>
+                            <div class="bar-row"><span class="bar bar-sm"></span></div>
+                            <div class="bar-label">Feb</div>
+                            <div class="bar-row"><span class="bar bar-md"></span></div>
+                            <div class="bar-label">Mar</div>
+                            <div class="bar-row"><span class="bar bar-lg"></span></div>
+                            <div class="bar-label">Apr</div>
+                            <div class="bar-row"><span class="bar bar-xl"></span></div>
+                        </div>
+                    </article>
+
+                    <article class="chart-card">
+                        <div class="chart-card-header">
+                            <h3>Member Growth</h3>
+                        </div>
+                        <div class="chart-placeholder chart-line">
+                            <div class="line-point line-point-xs"></div>
+                            <div class="line-point line-point-sm"></div>
+                            <div class="line-point line-point-md"></div>
+                            <div class="line-point line-point-lg"></div>
+                            <div class="line-point line-point-xl"></div>
+                        </div>
+                    </article>
+
+                    <article class="chart-card">
+                        <div class="chart-card-header">
+                            <h3>Membership Distribution</h3>
+                        </div>
+                        <div class="chart-placeholder chart-pie">
+                            <div class="pie-slice slice-large"></div>
+                            <div class="pie-slice slice-medium"></div>
+                            <div class="pie-slice slice-small"></div>
+                        </div>
+                    </article>
+                </div>
+            </section>
+        </main>
+    </div>
+</body>
+</html>
