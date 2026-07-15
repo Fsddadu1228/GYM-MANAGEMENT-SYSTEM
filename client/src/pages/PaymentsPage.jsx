@@ -414,59 +414,13 @@ export default function PaymentsPage({
   // Printing logic
   const handlePrint = (p) => {
     if (!p) return;
-    const methodDisplay = p.method === 'gcash' ? 'GCash' : p.method === 'credit-card' ? 'Credit Card' : p.method.charAt(0).toUpperCase() + p.method.slice(1);
-    
-    const printHtml = `
-      <html>
-      <head>
-        <title>Receipt ${p.invoice}</title>
-        <style>
-          body { font-family: 'Outfit', 'Segoe UI', Arial, sans-serif; padding: 40px; color: #1e293b; background: white; }
-          .receipt-box { max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; padding: 32px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
-          .header { border-bottom: 2px solid #3b82f6; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; }
-          .header h2 { margin: 0; color: #2563eb; font-size: 1.8rem; }
-          .header p { margin: 0; color: #64748b; font-size: 0.9rem; }
-          .invoice-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; font-size: 1rem; }
-          .invoice-row strong { color: #475569; }
-          .invoice-row span { color: #0f172a; font-weight: 600; }
-          .footer { margin-top: 32px; text-align: center; color: #64748b; font-size: 0.9rem; border-top: 1px solid #e2e8f0; padding-top: 16px; }
-        </style>
-      </head>
-      <body>
-        <div class="receipt-box">
-          <div class="header">
-            <div>
-              <h2>FitnessGym</h2>
-              <p>Official Payment Receipt</p>
-            </div>
-            <div>
-              <strong>${p.invoice}</strong>
-            </div>
-          </div>
-          <div class="invoice-row"><strong>Member Name</strong><span>${getPaymentMemberName(p)}</span></div>
-          <div class="invoice-row"><strong>Membership Plan</strong><span>${p.plan}</span></div>
-          <div class="invoice-row"><strong>Amount Paid</strong><span>${p.amount}</span></div>
-          <div class="invoice-row"><strong>Payment Method</strong><span>${methodDisplay}</span></div>
-          <div class="invoice-row"><strong>Reference ID</strong><span>${p.ref || '—'}</span></div>
-          <div class="invoice-row"><strong>Status</strong><span style="color:#10b981;">PAID</span></div>
-          <div class="invoice-row"><strong>Payment Date</strong><span>${p.paid}</span></div>
-          <p style="margin-top:20px; font-style:italic; color:#64748b;">Notes: ${p.notes || 'No extra notes.'}</p>
-          <div class="footer">
-            <p>Thank you for choosing FitnessGym. Stay active, stay healthy!</p>
-          </div>
-        </div>
-        <script>window.onload = function() { window.print(); }</script>
-      </body>
-      </html>
-    `;
-
     const w = window.open('', '_blank');
     if (!w) {
       alert('Popup blocker detected. Please allow popups to print receipt.');
       return;
     }
     w.document.open();
-    w.document.write(printHtml);
+    w.document.write(getReceiptHtml(p, true));
     w.document.close();
   };
 
