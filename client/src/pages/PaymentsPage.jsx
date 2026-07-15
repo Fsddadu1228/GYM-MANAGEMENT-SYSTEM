@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useState, useEffect } from 'react';
 import { GymContext } from '../context/GymContextObject';
-import { Search, X } from 'lucide-react';
+import { Download, Printer, ReceiptText, Search, X } from 'lucide-react';
 
 export default function PaymentsPage({
   openRecordModalOnLoad,
@@ -12,6 +12,8 @@ export default function PaymentsPage({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [selectedMethod, setSelectedMethod] = useState('all');
+  const [selectedPlan, setSelectedPlan] = useState('all');
+  const [sortBy, setSortBy] = useState('paid-newest');
   const [currentPage, setCurrentPage] = useState(1);
   const paymentsPageSize = 5;
 
@@ -24,7 +26,7 @@ export default function PaymentsPage({
   const [viewingPayment, setViewingPayment] = useState(null);
 
   // Form Fields State
-  const [member, setMember] = useState('');
+  const [selectedMemberId, setSelectedMemberId] = useState('');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('gcash');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -43,13 +45,40 @@ export default function PaymentsPage({
 
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
   const overdueCount = payments.filter((p) => p.status === 'overdue').length;
+  const planOptions = [...new Set(payments.map((p) => p.plan).filter(Boolean))].sort();
+
+  const compareValues = (a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
+  };
 
   // Search & Filtering
   const filtered = payments.filter((p) => {
-    const matchesSearch = !searchTerm || (p.member || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const linkedMember = members.find((member) => member.id === p.memberId);
+    const displayName = linkedMember?.name || p.member || '';
+    const matchesSearch = !searchTerm || displayName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = selectedStatus === 'all' || p.status === selectedStatus;
     const matchesMethod = selectedMethod === 'all' || p.method === selectedMethod;
-    return matchesSearch && matchesStatus && matchesMethod;
+    const matchesPlan = selectedPlan === 'all' || p.plan === selectedPlan;
+    return matchesSearch && matchesStatus && matchesMethod && matchesPlan;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'paid-oldest':
+        return compareValues(new Date(a.paidISO || a.createdAt || 0).getTime(), new Date(b.paidISO || b.createdAt || 0).getTime());
+      case 'amount-high':
+        return compareValues(Number((b.amount || '').replace(/[^0-9.]/g, '')), Number((a.amount || '').replace(/[^0-9.]/g, '')));
+      case 'amount-low':
+        return compareValues(Number((a.amount || '').replace(/[^0-9.]/g, '')), Number((b.amount || '').replace(/[^0-9.]/g, '')));
+      case 'member-asc':
+        return compareValues(a.member, b.member);
+      case 'renewal-soon':
+        return compareValues(new Date(a.coverageEnd || '9999-12-31').getTime(), new Date(b.coverageEnd || '9999-12-31').getTime());
+      case 'status':
+        return compareValues(a.status, b.status);
+      case 'paid-newest':
+      default:
+        return compareValues(new Date(b.paidISO || b.createdAt || 0).getTime(), new Date(a.paidISO || a.createdAt || 0).getTime());
+    }
   });
 
   const totalMatches = filtered.length;
@@ -65,7 +94,7 @@ export default function PaymentsPage({
     setRecordMode('record');
     setEditingPayment(null);
     if (members.length > 0) {
-      setMember(members[0].name);
+      setSelectedMemberId(String(members[0].id));
     }
     setAmount('');
     setMethod('gcash');
@@ -85,15 +114,16 @@ export default function PaymentsPage({
 
   // Set default member in dropdown if members exist
   useEffect(() => {
-    if (members.length > 0 && !member) {
-      setMember(members[0].name);
+    if (members.length > 0 && !selectedMemberId) {
+      setSelectedMemberId(String(members[0].id));
     }
-  }, [members, member]);
+  }, [members, selectedMemberId]);
 
   const triggerEditModal = (payment) => {
     setRecordMode('edit');
     setEditingPayment(payment);
-    setMember(payment.member);
+    const linkedMember = members.find((m) => m.id === payment.memberId) || members.find((m) => m.name === payment.member);
+    setSelectedMemberId(linkedMember ? String(linkedMember.id) : '');
     setAmount(payment.amount.replace(/[₱,]/g, '').trim());
     setMethod(payment.method);
     setDate(payment.paidISO || new Date().toISOString().slice(0, 10));
@@ -117,6 +147,103 @@ export default function PaymentsPage({
     return cycle.charAt(0).toUpperCase() + cycle.slice(1);
   };
 
+  const formatMethod = (paymentMethod) => {
+    if (!paymentMethod) return 'Not recorded';
+    if (paymentMethod === 'gcash') return 'GCash';
+    if (paymentMethod === 'credit-card') return 'Credit Card';
+    return paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1);
+  };
+
+  const getPaymentMember = (payment) => {
+    return members.find((memberRecord) => memberRecord.id === payment.memberId) || null;
+  };
+
+  const getPaymentMemberName = (payment) => {
+    return getPaymentMember(payment)?.name || payment.member || 'Unknown member';
+  };
+
+  const escapeHtml = (value) => {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  const getReceiptHtml = (payment, shouldAutoPrint = false) => {
+    const paidDate = payment.paidISO
+      ? new Date(payment.paidISO).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : payment.paid || 'Not recorded';
+    const renewalDate = payment.coverageEnd
+      ? new Date(payment.coverageEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+      : payment.due || 'Not recorded';
+
+    return `
+      <!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Receipt ${escapeHtml(payment.invoice || '')}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; padding: 36px; color: #172033; background: #f8fafc; }
+          .receipt-box { max-width: 680px; margin: 0 auto; background: white; border: 1px solid #dbe4ef; padding: 34px; border-radius: 18px; box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08); }
+          .header { border-bottom: 3px solid #2563eb; padding-bottom: 18px; margin-bottom: 24px; display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; }
+          .brand h1 { margin: 0; color: #0f172a; font-size: 2rem; letter-spacing: 0; }
+          .brand p, .meta p { margin: 4px 0 0; color: #64748b; font-size: 0.95rem; }
+          .meta { text-align: right; }
+          .meta strong { display: block; color: #2563eb; font-size: 1.1rem; }
+          .status { display: inline-block; margin-top: 10px; color: #166534; background: #dcfce7; padding: 6px 12px; border-radius: 999px; font-weight: 800; font-size: 0.8rem; }
+          .amount { margin: 24px 0; padding: 20px; border-radius: 14px; background: #eff6ff; display: flex; justify-content: space-between; align-items: center; }
+          .amount span { color: #1d4ed8; font-weight: 800; }
+          .amount strong { color: #0f172a; font-size: 1.8rem; }
+          .row { display: flex; justify-content: space-between; gap: 24px; padding: 13px 0; border-bottom: 1px solid #edf2f7; }
+          .row span:first-child { color: #64748b; font-weight: 700; }
+          .row span:last-child { color: #0f172a; font-weight: 800; text-align: right; }
+          .notes { margin-top: 18px; color: #475569; line-height: 1.6; }
+          .footer { margin-top: 30px; text-align: center; color: #64748b; font-size: 0.9rem; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+          @media print {
+            body { background: white; padding: 0; }
+            .receipt-box { box-shadow: none; border: 0; border-radius: 0; }
+          }
+        </style>
+      </head>
+      <body>
+        <main class="receipt-box">
+          <section class="header">
+            <div class="brand">
+              <h1>FitnessGym</h1>
+              <p>Official Payment Receipt</p>
+            </div>
+            <div class="meta">
+              <strong>${escapeHtml(payment.invoice || 'No invoice')}</strong>
+              <p>${escapeHtml(paidDate)}</p>
+              <span class="status">${escapeHtml((payment.status || 'paid').toUpperCase())}</span>
+            </div>
+          </section>
+          <section class="amount">
+            <span>Amount Paid</span>
+            <strong>${escapeHtml(payment.amount)}</strong>
+          </section>
+          <section>
+            <div class="row"><span>Member Name</span><span>${escapeHtml(getPaymentMemberName(payment))}</span></div>
+            <div class="row"><span>Membership Plan</span><span>${escapeHtml(payment.plan)}</span></div>
+            <div class="row"><span>Billing Cycle</span><span>${escapeHtml(formatCycle(payment.billingCycle))}</span></div>
+            <div class="row"><span>Payment Method</span><span>${escapeHtml(formatMethod(payment.method))}</span></div>
+            <div class="row"><span>Payment Date</span><span>${escapeHtml(paidDate)}</span></div>
+            <div class="row"><span>Renewal Date</span><span>${escapeHtml(renewalDate)}</span></div>
+            <div class="row"><span>Reference No.</span><span>${escapeHtml(payment.ref || 'Not recorded')}</span></div>
+          </section>
+          <p class="notes"><strong>Notes:</strong> ${escapeHtml(payment.notes || 'No extra notes.')}</p>
+          <footer class="footer">Thank you for choosing FitnessGym. Stay active, stay healthy.</footer>
+        </main>
+        ${shouldAutoPrint ? '<script>window.onload = function() { window.print(); }</script>' : ''}
+      </body>
+      </html>
+    `;
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
 
@@ -126,7 +253,11 @@ export default function PaymentsPage({
       return;
     }
 
-    const selectedMember = members.find((m) => m.name === member);
+    const selectedMember = members.find((m) => m.id === Number(selectedMemberId));
+    if (!selectedMember) {
+      alert('Please choose a valid member');
+      return;
+    }
     const plan = selectedMember ? selectedMember.plan : 'Basic';
     const amountStr = `₱${amtNum.toLocaleString('en-PH')}`;
 
@@ -134,8 +265,8 @@ export default function PaymentsPage({
     const formattedPaidDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
     const payload = {
-      memberId: selectedMember ? selectedMember.id : editingPayment?.memberId ?? null,
-      member,
+      memberId: selectedMember.id,
+      member: selectedMember.name,
       plan,
       amount: amountStr,
       method,
@@ -157,6 +288,8 @@ export default function PaymentsPage({
       const createdPayment = await recordPayment(payload);
       if (createdPayment) {
         alert('Payment recorded successfully.');
+        setViewingPayment(createdPayment);
+        setIsDetailsOpen(true);
       } else {
         alert('Unable to record payment. Please try again.');
       }
@@ -197,7 +330,7 @@ export default function PaymentsPage({
               <strong>${p.invoice}</strong>
             </div>
           </div>
-          <div class="invoice-row"><strong>Member Name</strong><span>${p.member}</span></div>
+          <div class="invoice-row"><strong>Member Name</strong><span>${getPaymentMemberName(p)}</span></div>
           <div class="invoice-row"><strong>Membership Plan</strong><span>${p.plan}</span></div>
           <div class="invoice-row"><strong>Amount Paid</strong><span>${p.amount}</span></div>
           <div class="invoice-row"><strong>Payment Method</strong><span>${methodDisplay}</span></div>
@@ -222,6 +355,20 @@ export default function PaymentsPage({
     w.document.open();
     w.document.write(printHtml);
     w.document.close();
+  };
+
+  const handleDownloadReceipt = (p) => {
+    if (!p) return;
+    const blob = new Blob([getReceiptHtml(p)], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeInvoice = String(p.invoice || `receipt-${p.id || Date.now()}`).replace(/[^a-z0-9-]/gi, '');
+    link.href = url;
+    link.download = `FitnessGym-${safeInvoice}.html`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   // Pagination buttons
@@ -349,6 +496,45 @@ export default function PaymentsPage({
                 <option value="credit-card">Credit Card</option>
               </select>
             </div>
+
+            <div className="toolbar-group-inline">
+              <label htmlFor="paymentPlanFilter">Plan</label>
+              <select
+                id="paymentPlanFilter"
+                value={selectedPlan}
+                onChange={(e) => {
+                  setSelectedPlan(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="select-inline"
+              >
+                <option value="all">All</option>
+                {planOptions.map((planOption) => (
+                  <option key={planOption} value={planOption}>{planOption}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="toolbar-group-inline">
+              <label htmlFor="paymentSort">Sort</label>
+              <select
+                id="paymentSort"
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="select-inline"
+              >
+                <option value="paid-newest">Newest paid</option>
+                <option value="paid-oldest">Oldest paid</option>
+                <option value="renewal-soon">Renewal soonest</option>
+                <option value="amount-high">Amount high-low</option>
+                <option value="amount-low">Amount low-high</option>
+                <option value="member-asc">Member A-Z</option>
+                <option value="status">Status</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -376,12 +562,16 @@ export default function PaymentsPage({
               ) : (
                 paginated.map((p) => {
                   const methodDisplay = p.method === 'gcash' ? 'GCash' : p.method === 'credit-card' ? 'Credit Card' : p.method.charAt(0).toUpperCase() + p.method.slice(1);
+                  const memberDisplay = getPaymentMemberName(p);
                   const statusClass = p.status === 'paid' ? 'status-active' : p.status === 'pending' ? 'status-pending' : 'status-inactive';
                   const statusText = p.status === 'paid' ? 'Paid' : p.status === 'pending' ? 'Pending' : 'Overdue';
 
                   return (
                     <tr key={p.id} className="payment-row">
-                      <td style={{ fontWeight: 600 }}>{p.member}</td>
+                      <td style={{ fontWeight: 600 }}>
+                        {memberDisplay}
+                        <small className="table-subtext">MEM-{String(p.memberId || '').padStart(3, '0')}</small>
+                      </td>
                       <td>{p.plan}</td>
                       <td>{p.amount}</td>
                       <td>{methodDisplay}</td>
@@ -444,10 +634,10 @@ export default function PaymentsPage({
             <form onSubmit={handleFormSubmit} className="modal-body">
               <label className="form-row">
                 <span>Member</span>
-                <select value={member} onChange={(e) => setMember(e.target.value)} required>
+                <select value={selectedMemberId} onChange={(e) => setSelectedMemberId(e.target.value)} required>
                   {members.map((m) => (
-                    <option key={m.id} value={m.name}>
-                      {m.name}
+                    <option key={m.id} value={String(m.id)}>
+                      MEM-{String(m.id).padStart(3, '0')} - {m.name}
                     </option>
                   ))}
                 </select>
@@ -520,7 +710,9 @@ export default function PaymentsPage({
         <div className="modal" aria-hidden="false">
           <div className="modal-panel">
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0 }}>Payment Details</h2>
+              <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <ReceiptText size={22} /> Payment Receipt
+              </h2>
               <button onClick={closeDetailsModal} className="modal-close" style={{ position: 'static' }}>
                 <X size={20} />
               </button>
@@ -534,7 +726,7 @@ export default function PaymentsPage({
                 </div>
                 <div className="invoice-row">
                   <strong>Member</strong>
-                  <span>{viewingPayment.member}</span>
+                  <span>{getPaymentMemberName(viewingPayment)}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Membership</strong>
@@ -589,8 +781,11 @@ export default function PaymentsPage({
               <button onClick={closeDetailsModal} className="secondary-btn">
                 Close
               </button>
-              <button onClick={() => handlePrint(viewingPayment)} className="primary-btn">
-                Print Receipt
+              <button onClick={() => handleDownloadReceipt(viewingPayment)} className="secondary-btn icon-text-btn">
+                <Download size={16} /> Download
+              </button>
+              <button onClick={() => handlePrint(viewingPayment)} className="primary-btn icon-text-btn">
+                <Printer size={16} /> Print Receipt
               </button>
             </footer>
           </div>

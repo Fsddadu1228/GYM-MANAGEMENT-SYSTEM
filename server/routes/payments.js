@@ -13,57 +13,74 @@ router.get('/', async (req, res) => {
     const paymentsMissingCoverage = await Payment.find({
       $or: [{ coverageEnd: { $exists: false } }, { coverageEnd: '' }, { billingCycle: { $exists: false } }]
     }).lean();
+    const paymentsWithMemberId = await Payment.find({
+      memberId: { $exists: true, $ne: null }
+    }).lean();
+    const members = await Member.find().lean();
+    const memberIdByName = new Map(members.map((member) => [member.name, member.id]));
+    const memberById = new Map(members.map((member) => [member.id, member]));
+    const memberByName = new Map(members.map((member) => [member.name, member]));
+    const writesById = new Map();
 
-    if (paymentsMissingMemberId.length > 0 || paymentsMissingCoverage.length > 0) {
-      const members = await Member.find().lean();
-      const memberIdByName = new Map(members.map((member) => [member.name, member.id]));
-      const memberById = new Map(members.map((member) => [member.id, member]));
-      const memberByName = new Map(members.map((member) => [member.name, member]));
-      const writesById = new Map();
-
-      paymentsMissingMemberId
-        .map((payment) => ({
-          payment,
-          memberId: memberIdByName.get(payment.member)
-        }))
-        .filter(({ memberId }) => Number.isInteger(memberId))
-        .forEach(({ payment, memberId }) => {
-          writesById.set(String(payment._id), {
-            filter: { _id: payment._id },
-            update: { $set: { memberId } }
-          });
-        });
-
-      paymentsMissingCoverage.forEach((payment) => {
-        const inferredMemberId = payment.memberId ?? memberIdByName.get(payment.member);
-        const member = memberById.get(inferredMemberId) || memberByName.get(payment.member);
-        const renewalDetails = buildRenewalDetails(payment, member);
-        const existingWrite = writesById.get(String(payment._id)) || {
+    paymentsMissingMemberId
+      .map((payment) => ({
+        payment,
+        memberId: memberIdByName.get(payment.member)
+      }))
+      .filter(({ memberId }) => Number.isInteger(memberId))
+      .forEach(({ payment, memberId }) => {
+        writesById.set(String(payment._id), {
           filter: { _id: payment._id },
-          update: { $set: {} }
-        };
-
-        existingWrite.update.$set = {
-          ...existingWrite.update.$set,
-          due: renewalDetails.due,
-          paidISO: renewalDetails.paidISO,
-          billingCycle: renewalDetails.billingCycle,
-          coverageStart: renewalDetails.coverageStart,
-          coverageEnd: renewalDetails.coverageEnd
-        };
-
-        if (Number.isInteger(inferredMemberId)) {
-          existingWrite.update.$set.memberId = inferredMemberId;
-        }
-
-        writesById.set(String(payment._id), existingWrite);
+          update: { $set: { memberId } }
+        });
       });
 
-      const writes = Array.from(writesById.values()).map((write) => ({ updateOne: write }));
+    paymentsMissingCoverage.forEach((payment) => {
+      const inferredMemberId = payment.memberId ?? memberIdByName.get(payment.member);
+      const member = memberById.get(inferredMemberId) || memberByName.get(payment.member);
+      const renewalDetails = buildRenewalDetails(payment, member);
+      const existingWrite = writesById.get(String(payment._id)) || {
+        filter: { _id: payment._id },
+        update: { $set: {} }
+      };
 
-      if (writes.length > 0) {
-        await Payment.bulkWrite(writes);
+      existingWrite.update.$set = {
+        ...existingWrite.update.$set,
+        due: renewalDetails.due,
+        paidISO: renewalDetails.paidISO,
+        billingCycle: renewalDetails.billingCycle,
+        coverageStart: renewalDetails.coverageStart,
+        coverageEnd: renewalDetails.coverageEnd
+      };
+
+      if (Number.isInteger(inferredMemberId)) {
+        existingWrite.update.$set.memberId = inferredMemberId;
       }
+
+      writesById.set(String(payment._id), existingWrite);
+    });
+
+    paymentsWithMemberId.forEach((payment) => {
+      const member = memberById.get(payment.memberId);
+      if (!member) return;
+      if (payment.member === member.name) return;
+
+      const existingWrite = writesById.get(String(payment._id)) || {
+        filter: { _id: payment._id },
+        update: { $set: {} }
+      };
+
+      existingWrite.update.$set = {
+        ...existingWrite.update.$set,
+        member: member.name
+      };
+
+      writesById.set(String(payment._id), existingWrite);
+    });
+
+    const writes = Array.from(writesById.values()).map((write) => ({ updateOne: write }));
+    if (writes.length > 0) {
+      await Payment.bulkWrite(writes);
     }
 
     const payments = await Payment.find().sort({ id: 1 }).lean();
@@ -83,6 +100,9 @@ router.put('/', async (req, res) => {
     const ids = payments.map((payment) => payment.id);
     if (ids.some((id) => !Number.isInteger(id))) {
       return res.status(400).json({ error: 'Every payment must include a numeric id' });
+    }
+    if (payments.some((payment) => !Number.isInteger(payment.memberId))) {
+      return res.status(400).json({ error: 'Every payment must include a valid memberId' });
     }
     if (new Set(ids).size !== ids.length) {
       return res.status(400).json({ error: 'Payment ids must be unique' });
@@ -122,10 +142,17 @@ router.post('/', async (req, res) => {
   try {
     const maxDoc = await Payment.findOne().sort({ id: -1 }).lean();
     const nextId = maxDoc ? maxDoc.id + 1 : 1;
-    const member = await Member.findOne({
-      $or: [{ id: req.body.memberId }, { name: req.body.member }]
-    }).lean();
-    const paymentPayload = buildRenewalDetails({ ...req.body, id: nextId }, member);
+    const member = await Member.findOne({ id: Number(req.body.memberId) }).lean();
+    if (!member) {
+      return res.status(400).json({ error: 'A valid memberId is required to record a payment' });
+    }
+    const paymentPayload = buildRenewalDetails({
+      ...req.body,
+      id: nextId,
+      memberId: member.id,
+      member: member.name,
+      plan: member.plan
+    }, member);
     const payment = await Payment.create(paymentPayload);
 
     if (member && payment.status === 'paid') {
@@ -151,10 +178,18 @@ router.put('/:id', async (req, res) => {
   try {
     const existingPayment = await Payment.findOne({ id: Number(req.params.id) }).lean();
     if (!existingPayment) return res.status(404).json({ error: 'Payment not found' });
-    const member = await Member.findOne({
-      $or: [{ id: req.body.memberId }, { name: req.body.member }]
-    }).lean();
-    const paymentPayload = buildRenewalDetails({ ...existingPayment, ...req.body }, member);
+    const requestedMemberId = req.body.memberId ?? existingPayment.memberId;
+    const member = await Member.findOne({ id: Number(requestedMemberId) }).lean();
+    if (!member) {
+      return res.status(400).json({ error: 'A valid memberId is required to update a payment' });
+    }
+    const paymentPayload = buildRenewalDetails({
+      ...existingPayment,
+      ...req.body,
+      memberId: member.id,
+      member: member.name,
+      plan: member.plan
+    }, member);
     const payment = await Payment.findOneAndUpdate(
       { id: Number(req.params.id) },
       paymentPayload,

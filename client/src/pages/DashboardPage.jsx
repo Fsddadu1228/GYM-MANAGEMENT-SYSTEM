@@ -1,324 +1,327 @@
 import React, { useContext } from 'react';
 import { GymContext } from '../context/GymContextObject';
-import { Users, Plus, CreditCard, BarChart2 } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowRight,
+  BarChart2,
+  CalendarClock,
+  CreditCard,
+  DollarSign,
+  Plus,
+  ReceiptText,
+  TrendingUp,
+  UserPlus,
+  Users
+} from 'lucide-react';
 
 export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, setOpenRecordPaymentOnLoad }) {
   const { members, payments } = useContext(GymContext);
 
-  // Stats calculation
-  const totalMembers = members.length;
-  const activeMembers = members.filter((m) => m.status === 'active').length;
-  const pendingPayments = payments.filter((p) => p.status === 'pending').length;
-
-  const totalRevenue = payments
-    .filter((p) => p.status === 'paid')
-    .reduce((sum, p) => sum + Number((p.amount || '').replace(/[₱,]/g, '')), 0);
-
-  // Plan Mix calculations
-  const planCounts = { Premium: 0, Standard: 0, Basic: 0 };
-  members.forEach((m) => {
-    const p = m.plan || 'Basic';
-    const planName = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
-    if (planCounts[planName] !== undefined) {
-      planCounts[planName]++;
-    }
-  });
-
-  const totalPlans = Object.values(planCounts).reduce((a, b) => a + b, 0);
-
-  const colors = {
-    Premium: '#3b82f6',
-    Standard: '#60a5fa',
-    Basic: '#93c5fd'
-  };
-
-  const conicSlices = [];
-  let currentPercentage = 0;
-
-  const planPercentages = Object.entries(planCounts).map(([planName, count]) => {
-    const pct = totalPlans > 0 ? (count / totalPlans) * 100 : 0;
-    const startAngle = currentPercentage;
-    currentPercentage += pct;
-    const endAngle = currentPercentage;
-
-    if (pct > 0) {
-      conicSlices.push(`${colors[planName]} ${startAngle}% ${endAngle}%`);
-    }
-
-    return { planName, count, percentage: Math.round(pct) };
-  });
-
-  const donutStyle = conicSlices.length > 0
-    ? { background: `conic-gradient(${conicSlices.join(', ')})`, width: '140px' }
-    : { background: '#1e293b', width: '140px' };
-
-  // Recent Activities
-  const activities = [];
-  members.forEach((m) => {
-    if (m.joined) {
-      activities.push({
-        date: new Date(m.joined),
-        dateStr: m.joined,
-        text: `New member joined: <strong>${m.name}</strong>`,
-        detail: `Enrolled in ${m.plan} plan`,
-        type: 'member'
-      });
-    }
-  });
-
-  payments.forEach((p) => {
-    if (p.status === 'paid' && p.paidISO) {
-      activities.push({
-        date: new Date(p.paidISO),
-        dateStr: p.paidISO,
-        text: `Payment of <strong>${p.amount}</strong> received`,
-        detail: `From ${p.member} (${(p.method || 'cash').toUpperCase()})`,
-        type: 'payment'
-      });
-    }
-  });
-
-  activities.sort((a, b) => b.date - a.date);
-  const recentActivities = activities.slice(0, 4);
-
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const currentMonth = today.getMonth();
+  const currentYear = today.getFullYear();
+
+  const parseAmount = (amount) => Number(String(amount || '').replace(/[^0-9.]/g, '')) || 0;
+  const formatMoney = (value) => `PHP ${value.toLocaleString('en-PH')}`;
+  const formatDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const formatFullDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  const getDueInfo = (member) => {
+    const dueDate = member.nextPaymentDue ? new Date(member.nextPaymentDue) : null;
+    if (!dueDate || Number.isNaN(dueDate.getTime())) return null;
+    dueDate.setHours(0, 0, 0, 0);
+    const days = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+    return { dueDate, days };
+  };
+
+  const totalMembers = members.length;
+  const activeMembers = members.filter((member) => member.status === 'active').length;
+  const expiredMembers = members
+    .map((member) => ({ ...member, due: getDueInfo(member) }))
+    .filter((member) => member.due && member.due.days < 0)
+    .sort((a, b) => a.due.days - b.due.days);
 
   const upcomingRenewals = members
-    .map((member) => {
-      const dueDate = member.nextPaymentDue ? new Date(member.nextPaymentDue) : null;
-      if (!dueDate || Number.isNaN(dueDate.getTime())) return null;
+    .map((member) => ({ ...member, due: getDueInfo(member) }))
+    .filter((member) => member.due && member.due.days >= 0 && member.due.days <= 14)
+    .sort((a, b) => a.due.days - b.due.days);
 
-      dueDate.setHours(0, 0, 0, 0);
-      const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+  const pendingPaymentItems = payments
+    .filter((payment) => payment.status === 'pending' || payment.status === 'overdue')
+    .sort((a, b) => String(a.status).localeCompare(String(b.status)));
 
-      return {
-        id: member.id,
-        name: member.name,
-        plan: member.plan || 'Basic',
-        dueDate,
-        daysUntilDue
-      };
+  const monthlyRevenue = payments
+    .filter((payment) => {
+      const paidDate = payment.paidISO ? new Date(payment.paidISO) : null;
+      return payment.status === 'paid' && paidDate && paidDate.getMonth() === currentMonth && paidDate.getFullYear() === currentYear;
     })
-    .filter(Boolean)
-    .filter((renewal) => renewal.daysUntilDue >= -30 && renewal.daysUntilDue <= 30)
-    .sort((a, b) => a.dueDate - b.dueDate)
+    .reduce((sum, payment) => sum + parseAmount(payment.amount), 0);
+
+  const newMembersThisMonth = members.filter((member) => {
+    const joined = member.joined ? new Date(member.joined) : null;
+    return joined && joined.getMonth() === currentMonth && joined.getFullYear() === currentYear;
+  });
+
+  const planCounts = members.reduce((acc, member) => {
+    const plan = member.plan || 'Basic';
+    acc[plan] = (acc[plan] || 0) + 1;
+    return acc;
+  }, {});
+
+  const planColors = ['#4f8cff', '#2dd4bf', '#fbbf24', '#fb7185', '#a78bfa'];
+  let currentSlice = 0;
+  const planEntries = Object.entries(planCounts).map(([plan, count], index) => {
+    const percentage = totalMembers > 0 ? Math.round((count / totalMembers) * 100) : 0;
+    const start = currentSlice;
+    currentSlice += percentage;
+    return {
+      plan,
+      count,
+      percentage,
+      color: planColors[index % planColors.length],
+      slice: `${planColors[index % planColors.length]} ${start}% ${currentSlice}%`
+    };
+  });
+
+  const donutStyle = planEntries.length
+    ? { background: `conic-gradient(${planEntries.map((entry) => entry.slice).join(', ')})` }
+    : { background: '#1e293b' };
+
+  const alerts = [
+    {
+      label: 'Expired members',
+      value: expiredMembers.length,
+      tone: 'danger',
+      icon: AlertTriangle,
+      action: 'Review',
+      onClick: () => setActivePage('members')
+    },
+    {
+      label: 'Upcoming renewals',
+      value: upcomingRenewals.length,
+      tone: 'warning',
+      icon: CalendarClock,
+      action: 'Open',
+      onClick: () => setActivePage('members')
+    },
+    {
+      label: 'Pending payments',
+      value: pendingPaymentItems.length,
+      tone: 'warning',
+      icon: ReceiptText,
+      action: 'Collect',
+      onClick: () => setActivePage('payments')
+    },
+    {
+      label: 'New this month',
+      value: newMembersThisMonth.length,
+      tone: 'good',
+      icon: UserPlus,
+      action: 'View',
+      onClick: () => setActivePage('members')
+    }
+  ];
+
+  const metricCards = [
+    { label: 'Total members', value: totalMembers, sub: `${activeMembers} active`, icon: Users },
+    { label: 'Monthly revenue', value: formatMoney(monthlyRevenue), sub: 'Paid payments this month', icon: DollarSign },
+    { label: 'Pending payments', value: pendingPaymentItems.length, sub: 'Needs follow-up', icon: CreditCard },
+    { label: 'Renewals due', value: upcomingRenewals.length, sub: 'Next 14 days', icon: CalendarClock }
+  ];
+
+  const recentPaidPayments = payments
+    .filter((payment) => payment.status === 'paid')
+    .sort((a, b) => new Date(b.paidISO || b.createdAt || 0) - new Date(a.paidISO || a.createdAt || 0))
     .slice(0, 5);
 
-  const formatRenewalDate = (date) => {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
-
-  const getRenewalStatus = (daysUntilDue) => {
-    if (daysUntilDue < 0) return { text: `${Math.abs(daysUntilDue)}d expired`, className: 'status-inactive' };
-    if (daysUntilDue === 0) return { text: 'Due today', className: 'status-pending' };
-    return { text: `${daysUntilDue}d left`, className: 'status-active' };
-  };
-
   return (
-    <div style={{ width: '100%' }}>
-      <header className="topbar">
+    <div className="dashboard-pro">
+      <header className="topbar dashboard-topbar">
         <div>
-          <p className="eyebrow">Overview</p>
+          <p className="eyebrow">Operations overview</p>
           <h1>Dashboard</h1>
+          <p className="dashboard-subtitle">Monitor renewals, revenue, and member risk from one control surface.</p>
         </div>
         <div className="report-actions">
           <button
-            onClick={() => setActivePage('members')}
-            className="secondary-btn"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+            type="button"
+            className="secondary-btn icon-text-btn"
+            onClick={() => {
+              setActivePage('members');
+              setOpenAddMemberOnLoad(true);
+            }}
           >
-            <Users size={16} /> Manage Members
+            <Plus size={16} /> Add Member
           </button>
           <button
+            type="button"
+            className="primary-btn icon-text-btn"
             onClick={() => {
               setActivePage('payments');
               setOpenRecordPaymentOnLoad(true);
             }}
-            className="primary-btn"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
           >
             <CreditCard size={16} /> Record Payment
           </button>
         </div>
       </header>
 
-      {/* Stats KPI Widgets */}
-      <section className="stats-grid">
-        <article className="stat-card">
-          <h3>Total Members</h3>
-          <p className="stat-value">{totalMembers}</p>
-        </article>
-        <article className="stat-card">
-          <h3>Active Members</h3>
-          <p className="stat-value active-count">{activeMembers}</p>
-        </article>
-        <article className="stat-card">
-          <h3>Total Revenue</h3>
-          <p className="stat-value">₱{totalRevenue.toLocaleString('en-PH')}</p>
-        </article>
-        <article className="stat-card">
-          <h3>Pending Payments</h3>
-          <p className="stat-value pending-count">{pendingPayments}</p>
-        </article>
+      <section className="dashboard-alert-strip">
+        {alerts.map((alert) => {
+          const Icon = alert.icon;
+          return (
+            <button key={alert.label} type="button" className={`alert-tile alert-${alert.tone}`} onClick={alert.onClick}>
+              <span className="alert-icon"><Icon size={18} /></span>
+              <span>
+                <strong>{alert.value}</strong>
+                <small>{alert.label}</small>
+              </span>
+              <span className="alert-action">{alert.action}<ArrowRight size={13} /></span>
+            </button>
+          );
+        })}
       </section>
 
-      {/* Grid Split Panel Layout */}
-      <section className="profile-grid">
-        {/* Recent Activities */}
-        <div className="profile-column">
-        <div className="profile-card">
-          <h3>Recent Activities</h3>
-          <div className="activity-list" style={{ marginTop: '12px' }}>
-            {recentActivities.length === 0 ? (
-              <p className="subtle" style={{ textAlign: 'center', padding: '16px' }}>No recent activities found.</p>
-            ) : (
-              recentActivities.map((act, index) => {
-                const icon = act.type === 'member' ? '👤' : '💳';
-                const borderLeftColor = act.type === 'member' ? '#3b82f6' : '#10b981';
-                const dateDisplay = new Date(act.dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      <section className="dashboard-metrics">
+        {metricCards.map((metric) => {
+          const Icon = metric.icon;
+          return (
+            <article key={metric.label} className="metric-panel">
+              <div>
+                <span className="metric-label">{metric.label}</span>
+                <strong>{metric.value}</strong>
+                <small>{metric.sub}</small>
+              </div>
+              <span className="metric-icon"><Icon size={20} /></span>
+            </article>
+          );
+        })}
+      </section>
 
-                return (
-                  <div
-                    key={index}
-                    className="activity-item"
-                    style={{
-                      padding: '12px 14px',
-                      gap: '12px',
-                      marginBottom: '8px',
-                      borderLeft: `3px solid ${borderLeftColor}`,
-                      display: 'flex',
-                      alignItems: 'flex-start'
-                    }}
-                  >
-                    <span style={{ fontSize: '1.2rem', marginTop: '-2px' }}>{icon}</span>
-                    <div style={{ flex: 1 }}>
-                      <p
-                        style={{ margin: 0, fontSize: '0.9rem', color: '#f8fafc' }}
-                        dangerouslySetInnerHTML={{ __html: act.text }}
-                      />
-                      <small style={{ color: '#94a3b8', fontSize: '0.78rem' }}>{act.detail}</small>
-                    </div>
-                    <span className="activity-date" style={{ minWidth: 'auto', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
-                      {dateDisplay}
-                    </span>
+      <section className="dashboard-workspace">
+        <div className="ops-panel priority-panel renewal-panel">
+          <div className="ops-panel-header">
+            <div>
+              <h2>Renewal Watchlist</h2>
+              <p>Expired members and renewals due within 14 days.</p>
+            </div>
+            <button type="button" className="text-action" onClick={() => setActivePage('members')}>View members</button>
+          </div>
+
+          <div className="watchlist-stack">
+            {[...expiredMembers.slice(0, 3), ...upcomingRenewals.slice(0, 5)].slice(0, 6).map((member) => {
+              const isExpired = member.due.days < 0;
+              return (
+                <div key={`${member.id}-${member.due.days}`} className="watchlist-row">
+                  <div>
+                    <strong>{member.name}</strong>
+                    <span>{member.plan || 'Basic'} plan - {formatFullDate(member.due.dueDate)}</span>
                   </div>
-                );
-              })
+                  <span className={`status-badge ${isExpired ? 'status-inactive' : 'status-pending'}`}>
+                    {isExpired ? `${Math.abs(member.due.days)}d expired` : member.due.days === 0 ? 'Due today' : `${member.due.days}d left`}
+                  </span>
+                </div>
+              );
+            })}
+            {expiredMembers.length + upcomingRenewals.length === 0 && (
+              <div className="empty-inline">No expired members or near-term renewals.</div>
             )}
           </div>
         </div>
 
-          <div className="profile-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', borderBottom: '2px solid #e5e7eb', paddingBottom: '12px', marginBottom: '18px' }}>
-              <h3 style={{ margin: 0, borderBottom: 0, paddingBottom: 0 }}>Upcoming Renewals</h3>
-              <button
-                type="button"
-                onClick={() => setActivePage('members')}
-                className="member-link"
-                style={{ background: 'transparent', border: 0, padding: 0, fontSize: '0.85rem', fontWeight: 700 }}
-              >
-                View All
-              </button>
+        <div className="ops-panel payment-panel">
+          <div className="ops-panel-header">
+            <div>
+              <h2>Payment Queue</h2>
+              <p>Pending and overdue invoices that need action.</p>
             </div>
-            <div className="activity-list" style={{ marginTop: '12px' }}>
-              {upcomingRenewals.length === 0 ? (
-                <p className="subtle" style={{ textAlign: 'center', padding: '16px' }}>No renewals due in the next 30 days.</p>
-              ) : (
-                upcomingRenewals.map((renewal) => {
-                  const status = getRenewalStatus(renewal.daysUntilDue);
+            <button type="button" className="text-action" onClick={() => setActivePage('payments')}>View payments</button>
+          </div>
 
-                  return (
-                    <div
-                      key={renewal.id}
-                      className="activity-item"
-                      style={{
-                        padding: '12px 14px',
-                        gap: '12px',
-                        marginBottom: '8px',
-                        borderLeft: `3px solid ${renewal.daysUntilDue < 0 ? '#ef4444' : '#f59e0b'}`,
-                        display: 'flex',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: 0, fontSize: '0.9rem', color: '#f8fafc', fontWeight: 700 }}>
-                          {renewal.name}
-                        </p>
-                        <small style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
-                          {renewal.plan} membership - {formatRenewalDate(renewal.dueDate)}
-                        </small>
-                      </div>
-                      <span className={`status-badge ${status.className}`} style={{ whiteSpace: 'nowrap' }}>
-                        {status.text}
-                      </span>
-                    </div>
-                  );
-                })
-              )}
+          <div className="payment-queue">
+            {pendingPaymentItems.slice(0, 6).map((payment) => (
+              <div key={payment.id} className="queue-row">
+                <div>
+                  <strong>{payment.member}</strong>
+                  <span>{payment.invoice || 'No invoice'} - {payment.plan}</span>
+                </div>
+                <div className="queue-amount">
+                  <strong>{payment.amount}</strong>
+                  <span className={`status-badge ${payment.status === 'overdue' ? 'status-inactive' : 'status-pending'}`}>
+                    {payment.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {pendingPaymentItems.length === 0 && (
+              <div className="empty-inline">No pending payments right now.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="ops-panel plan-panel">
+          <div className="ops-panel-header">
+            <div>
+              <h2>Plan Mix</h2>
+              <p>Membership distribution across active records.</p>
+            </div>
+          </div>
+          <div className="dashboard-plan-mix">
+            <div className="donut-chart dashboard-donut" style={donutStyle}>
+              <span>
+                {totalMembers}
+                <small>members</small>
+              </span>
+            </div>
+            <div className="plan-list">
+              {planEntries.map((entry) => (
+                <div key={entry.plan} className="plan-row">
+                  <span className="legend-dot" style={{ background: entry.color }}></span>
+                  <strong>{entry.plan}</strong>
+                  <small>{entry.count} members</small>
+                  <b>{entry.percentage}%</b>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Plan Mix & Quick Actions */}
-        <div className="profile-column">
-          <div className="profile-card">
-            <h3>Plan Mix Distribution</h3>
-            <div className="chart-placeholder distribution-chart" style={{ minHeight: 'auto', background: 'transparent', padding: '12px 0', marginTop: '8px' }}>
-              <div className="donut-chart" style={donutStyle}>
-                <span>
-                  {totalPlans}
-                  <small>plans</small>
-                </span>
-              </div>
-              <div className="chart-legend" style={{ gap: '6px' }}>
-                {planPercentages.map((p) => (
-                  <div key={p.planName} className="legend-item" style={{ padding: '6px 10px' }}>
-                    <span className="legend-dot" style={{ background: colors[p.planName] }}></span>
-                    <p style={{ fontSize: '0.8rem', margin: 0 }}>{p.planName}</p>
-                    <strong style={{ fontSize: '0.8rem' }}>{p.count} ({p.percentage}%)</strong>
-                  </div>
-                ))}
-              </div>
+        <div className="ops-panel revenue-panel">
+          <div className="ops-panel-header">
+            <div>
+              <h2>Recent Revenue</h2>
+              <p>Latest confirmed payment activity.</p>
             </div>
+            <TrendingUp size={18} />
           </div>
-
-          <div className="profile-card">
-            <h3>Quick Actions</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '12px' }}>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => {
-                  setActivePage('members');
-                  setOpenAddMemberOnLoad(true);
-                }}
-                style={{ padding: '16px', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderRadius: '14px', cursor: 'pointer' }}
-              >
-                <Plus size={20} color="#3b82f6" /> Add Member
-              </button>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => {
-                  setActivePage('payments');
-                  setOpenRecordPaymentOnLoad(true);
-                }}
-                style={{ padding: '16px', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderRadius: '14px', cursor: 'pointer' }}
-              >
-                <CreditCard size={20} color="#10b981" /> Record Payment
-              </button>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => setActivePage('reports')}
-                style={{ padding: '16px', fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', borderRadius: '14px', gridColumn: 'span 2', cursor: 'pointer' }}
-              >
-                <BarChart2 size={20} color="#a855f7" /> View Analytics & Reports
-              </button>
-            </div>
+          <div className="revenue-list">
+            {recentPaidPayments.map((payment) => (
+              <div key={payment.id} className="queue-row">
+                <div>
+                  <strong>{payment.member}</strong>
+                  <span>{payment.paidISO ? formatDate(new Date(payment.paidISO)) : payment.paid} - {(payment.method || 'cash').toUpperCase()}</span>
+                </div>
+                <strong>{payment.amount}</strong>
+              </div>
+            ))}
+            {recentPaidPayments.length === 0 && (
+              <div className="empty-inline">No paid payments recorded yet.</div>
+            )}
           </div>
         </div>
+      </section>
+
+      <section className="quick-command-bar">
+        <button type="button" onClick={() => setActivePage('members')}>
+          <Users size={17} /> Manage members
+        </button>
+        <button type="button" onClick={() => setActivePage('payments')}>
+          <ReceiptText size={17} /> Payment records
+        </button>
+        <button type="button" onClick={() => setActivePage('reports')}>
+          <BarChart2 size={17} /> Reports
+        </button>
       </section>
     </div>
   );

@@ -1604,6 +1604,331 @@ th {
   min-width: 920px;
 }
 
+.table-subtext {
+  display: block;
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+/* Professional dashboard operations layout */
+.dashboard-pro {
+  display: grid;
+  gap: 18px;
+}
+
+.dashboard-topbar {
+  margin-bottom: 8px !important;
+}
+
+.dashboard-subtitle {
+  margin-top: 8px;
+  color: var(--text-secondary);
+  max-width: 620px;
+}
+
+.dashboard-alert-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.alert-tile {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-primary);
+  padding: 14px;
+  min-height: 84px;
+  display: grid;
+  grid-template-columns: 38px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.alert-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.alert-icon,
+.metric-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(79, 140, 255, 0.12);
+  color: var(--accent-hover);
+}
+
+.alert-tile strong {
+  display: block;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.alert-tile small,
+.metric-panel small,
+.ops-panel-header p,
+.watchlist-row span,
+.queue-row span,
+.plan-row small {
+  color: var(--text-muted);
+}
+
+.alert-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.alert-danger .alert-icon {
+  background: rgba(251, 113, 133, 0.12);
+  color: var(--danger);
+}
+
+.alert-warning .alert-icon {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--warning);
+}
+
+.alert-good .alert-icon {
+  background: rgba(45, 212, 191, 0.12);
+  color: var(--success);
+}
+
+.dashboard-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metric-panel {
+  min-height: 118px;
+  padding: 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 29, 46, 0.86), rgba(12, 18, 30, 0.74));
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.metric-label {
+  display: block;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  font-weight: 800;
+  margin-bottom: 14px;
+}
+
+.metric-panel strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  line-height: 1.05;
+}
+
+.dashboard-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  grid-template-areas:
+    "renewal payment"
+    "renewal plan"
+    "revenue plan";
+  gap: 16px;
+  align-items: start;
+}
+
+.ops-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20, 29, 46, 0.88), rgba(12, 18, 30, 0.76));
+  box-shadow: var(--card-shadow);
+  padding: 18px;
+}
+
+.renewal-panel {
+  grid-area: renewal;
+}
+
+.payment-panel {
+  grid-area: payment;
+}
+
+.plan-panel {
+  grid-area: plan;
+}
+
+.revenue-panel {
+  grid-area: revenue;
+}
+
+.ops-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 14px;
+}
+
+.ops-panel-header h2 {
+  margin: 0 0 5px;
+  color: var(--text-primary);
+  font-size: 1.02rem;
+  letter-spacing: 0;
+}
+
+.text-action {
+  background: transparent;
+  border: 0;
+  color: var(--accent-hover);
+  font-weight: 800;
+  cursor: pointer;
+  padding: 2px 0;
+}
+
+.watchlist-stack,
+.payment-queue,
+.revenue-list,
+.plan-list {
+  display: grid;
+  gap: 10px;
+}
+
+.watchlist-row,
+.queue-row,
+.plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.watchlist-row strong,
+.queue-row strong,
+.plan-row strong {
+  display: block;
+  color: var(--text-primary);
+}
+
+.watchlist-row span,
+.queue-row span {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.82rem;
+}
+
+.queue-amount {
+  text-align: right;
+  display: grid;
+  gap: 7px;
+  justify-items: end;
+}
+
+.dashboard-plan-mix {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+.dashboard-donut {
+  width: 150px !important;
+  box-shadow: none !important;
+}
+
+.dashboard-donut::after {
+  background: var(--bg-card-strong) !important;
+}
+
+.plan-row {
+  display: grid;
+  grid-template-columns: 11px 1fr auto auto;
+}
+
+.plan-row b {
+  color: var(--text-primary);
+}
+
+.quick-command-bar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.quick-command-bar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--text-secondary);
+  font-weight: 800;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.quick-command-bar button:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+@media (max-width: 1180px) {
+  .dashboard-alert-strip,
+  .dashboard-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-workspace {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "renewal"
+      "payment"
+      "plan"
+      "revenue";
+  }
+}
+
+@media (max-width: 700px) {
+  .dashboard-alert-strip,
+  .dashboard-metrics,
+  .dashboard-plan-mix {
+    grid-template-columns: 1fr;
+  }
+
+  .alert-tile {
+    grid-template-columns: 38px 1fr;
+  }
+
+  .alert-action {
+    grid-column: 2;
+  }
+}
+
 /* Responsive Profile Page */
 @media (max-width: 1200px) {
   .profile-stats-grid {

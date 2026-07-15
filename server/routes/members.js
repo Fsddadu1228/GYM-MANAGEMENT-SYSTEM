@@ -1,5 +1,6 @@
 const express = require('express');
 const Member = require('../models/Member');
+const Payment = require('../models/Payment');
 
 const router = express.Router();
 
@@ -51,6 +52,10 @@ router.get('/:id', async (req, res) => {
   try {
     const member = await Member.findOne({ id: Number(req.params.id) }).lean();
     if (!member) return res.status(404).json({ error: 'Member not found' });
+    await Payment.updateMany(
+      { memberId: member.id },
+      { $set: { member: member.name } }
+    );
     res.json(member);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -247,6 +247,8 @@ function buildRenewalDetails(payment, member) {
 
   return {
     ...payment,
+    memberId: member?.id ?? payment.memberId ?? null,
+    member: member?.name || payment.member || '',
     plan,
     paidISO,
     paid: payment.paid || formatShortDate(paidISO),
@@ -402,6 +404,10 @@ export const GymProvider = ({ children, authToken }) => {
           body: JSON.stringify(updatedMember)
         });
         updateMembersList(newList.map((m) => (m.id === id ? savedMember : m)));
+        const renamedPayments = payments.map((payment) => (
+          payment.memberId === id ? { ...payment, member: savedMember.name } : payment
+        ));
+        updatePaymentsList(renamedPayments);
         return savedMember;
       } catch (err) {
         console.error('Failed to update member:', err);
@@ -410,6 +416,12 @@ export const GymProvider = ({ children, authToken }) => {
     }
 
     updateMembersList(newList);
+    if (updatedMember) {
+      const renamedPayments = payments.map((payment) => (
+        payment.memberId === id ? { ...payment, member: updatedMember.name } : payment
+      ));
+      updatePaymentsList(renamedPayments);
+    }
     return updatedMember || null;
   };
 

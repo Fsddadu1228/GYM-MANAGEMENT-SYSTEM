@@ -13,6 +13,11 @@ export default function MembersPage({
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedPlan, setSelectedPlan] = useState('all');
+  const [selectedRenewal, setSelectedRenewal] = useState('all');
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('all');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('all');
+  const [sortBy, setSortBy] = useState('name-asc');
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
@@ -45,15 +50,69 @@ export default function MembersPage({
   const activeCount = members.filter((m) => m.status === 'active').length;
   const pendingCount = members.filter((m) => m.status === 'pending').length;
   const inactiveCount = members.filter((m) => m.status === 'inactive').length;
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const planOptions = [...new Set(members.map((m) => m.plan).filter(Boolean))].sort();
+  const paymentMethodOptions = [...new Set(members.map((m) => m.paymentMethod).filter(Boolean))].sort();
 
-  // Search & Status Filter logic
+  const isExpired = (member) => {
+    if (!member.nextPaymentDue) return false;
+    const renewalDate = new Date(member.nextPaymentDue);
+    if (Number.isNaN(renewalDate.getTime())) return false;
+    return renewalDate.toISOString().slice(0, 10) < todayISO;
+  };
+
+  const isDueSoon = (member) => {
+    if (!member.nextPaymentDue || isExpired(member)) return false;
+    const renewalDate = new Date(member.nextPaymentDue);
+    if (Number.isNaN(renewalDate.getTime())) return false;
+    const today = new Date(todayISO);
+    const diffDays = Math.ceil((renewalDate - today) / (1000 * 60 * 60 * 24));
+    return diffDays <= 7;
+  };
+
+  const compareValues = (a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return a - b;
+    return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
+  };
+
+  // Search, filter, and sorting logic
   const filtered = members.filter((m) => {
     const matchesSearch =
       !searchTerm ||
       (m.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (m.email || '').toLowerCase().includes(searchTerm.toLowerCase());
+      (m.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (m.phone || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = selectedStatus === 'all' || m.status === selectedStatus;
-    return matchesSearch && matchesStatus;
+    const matchesPlan = selectedPlan === 'all' || m.plan === selectedPlan;
+    const matchesPaymentStatus =
+      selectedPaymentStatus === 'all' ||
+      (selectedPaymentStatus === 'pending' && (m.paymentStatus || '').toLowerCase() !== 'paid') ||
+      (m.paymentStatus || '').toLowerCase() === selectedPaymentStatus;
+    const matchesPaymentMethod = selectedPaymentMethod === 'all' || m.paymentMethod === selectedPaymentMethod;
+    const matchesRenewal =
+      selectedRenewal === 'all' ||
+      (selectedRenewal === 'expired' && isExpired(m)) ||
+      (selectedRenewal === 'due-soon' && isDueSoon(m)) ||
+      (selectedRenewal === 'current' && !isExpired(m));
+    return matchesSearch && matchesStatus && matchesPlan && matchesPaymentStatus && matchesPaymentMethod && matchesRenewal;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'name-desc':
+        return compareValues(b.name, a.name);
+      case 'join-newest':
+        return compareValues(new Date(b.joined).getTime(), new Date(a.joined).getTime());
+      case 'join-oldest':
+        return compareValues(new Date(a.joined).getTime(), new Date(b.joined).getTime());
+      case 'renewal-soon':
+        return compareValues(new Date(a.nextPaymentDue || '9999-12-31').getTime(), new Date(b.nextPaymentDue || '9999-12-31').getTime());
+      case 'plan':
+        return compareValues(a.plan, b.plan);
+      case 'status':
+        return compareValues(a.status, b.status);
+      case 'name-asc':
+      default:
+        return compareValues(a.name, b.name);
+    }
   });
 
   const totalMatches = filtered.length;
@@ -322,6 +381,98 @@ export default function MembersPage({
             </div>
 
             <div className="toolbar-group-inline">
+              <label htmlFor="planFilter">Plan:</label>
+              <select
+                id="planFilter"
+                value={selectedPlan}
+                onChange={(e) => {
+                  setSelectedPlan(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="select-inline"
+              >
+                <option value="all">All</option>
+                {planOptions.map((planOption) => (
+                  <option key={planOption} value={planOption}>{planOption}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="toolbar-group-inline">
+              <label htmlFor="renewalFilter">Renewal:</label>
+              <select
+                id="renewalFilter"
+                value={selectedRenewal}
+                onChange={(e) => {
+                  setSelectedRenewal(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="select-inline"
+              >
+                <option value="all">All</option>
+                <option value="expired">Expired</option>
+                <option value="due-soon">Due soon</option>
+                <option value="current">Current</option>
+              </select>
+            </div>
+
+            <div className="toolbar-group-inline">
+              <label htmlFor="memberPaymentFilter">Payment:</label>
+              <select
+                id="memberPaymentFilter"
+                value={selectedPaymentStatus}
+                onChange={(e) => {
+                  setSelectedPaymentStatus(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="select-inline"
+              >
+                <option value="all">All</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+              </select>
+            </div>
+
+            <div className="toolbar-group-inline">
+              <label htmlFor="memberPaymentMethodFilter">Method:</label>
+              <select
+                id="memberPaymentMethodFilter"
+                value={selectedPaymentMethod}
+                onChange={(e) => {
+                  setSelectedPaymentMethod(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="select-inline"
+              >
+                <option value="all">All</option>
+                {paymentMethodOptions.map((methodOption) => (
+                  <option key={methodOption} value={methodOption}>{methodOption}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="toolbar-group-inline">
+              <label htmlFor="memberSort">Sort:</label>
+              <select
+                id="memberSort"
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="select-inline"
+              >
+                <option value="name-asc">Name A-Z</option>
+                <option value="name-desc">Name Z-A</option>
+                <option value="renewal-soon">Renewal soonest</option>
+                <option value="join-newest">Newest joined</option>
+                <option value="join-oldest">Oldest joined</option>
+                <option value="plan">Plan</option>
+                <option value="status">Status</option>
+              </select>
+            </div>
+
+            <div className="toolbar-group-inline">
               <label htmlFor="pageSize">Show:</label>
               <select
                 id="pageSize"
@@ -357,6 +508,8 @@ export default function MembersPage({
                 <th scope="col">Email</th>
                 <th scope="col">Membership ID</th>
                 <th scope="col">Membership Type</th>
+                <th scope="col">Renewal</th>
+                <th scope="col">Payment</th>
                 <th scope="col">Join Date</th>
                 <th scope="col">Status</th>
                 <th scope="col">Actions</th>
@@ -365,7 +518,7 @@ export default function MembersPage({
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                  <td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
                     No members found.
                   </td>
                 </tr>
@@ -375,6 +528,10 @@ export default function MembersPage({
                   const joinedDateStr = member.joined
                     ? new Date(member.joined).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                     : '—';
+                  const renewalDateStr = member.nextPaymentDue
+                    ? new Date(member.nextPaymentDue).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    : 'Not set';
+                  const paymentStatus = (member.paymentStatus || 'Pending').toLowerCase();
                   const avatarMarkup = member.photo ? (
                     <div className="avatar">
                       <img src={member.photo} alt={member.name} />
@@ -412,6 +569,17 @@ export default function MembersPage({
                       <td>{member.email}</td>
                       <td>{memberIdStr}</td>
                       <td>{member.plan}</td>
+                      <td>
+                        <span className={`status-badge ${isExpired(member) ? 'status-inactive' : isDueSoon(member) ? 'status-pending' : 'status-active'}`}>
+                          {renewalDateStr}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${paymentStatus === 'paid' ? 'status-active' : 'status-pending'}`}>
+                          {member.paymentStatus || 'Pending'}
+                        </span>
+                        <small className="table-subtext">{member.paymentMethod || 'No method'}</small>
+                      </td>
                       <td>{joinedDateStr}</td>
                       <td>
                         <span className={`status-badge status-${member.status}`}>
