@@ -1448,6 +1448,162 @@ th {
   margin: 12px 0;
 }
 
+.icon-text-btn,
+.danger-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.danger-action-btn {
+  border: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #b91c1c;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.member-detail-page .profile-card h3,
+.profile-card-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-profile-badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.renewal-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.renewal-good {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.renewal-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.renewal-danger {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.renewal-neutral {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.profile-hero-meta {
+  min-width: 160px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-hero-meta span,
+.profile-hero-meta small {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.profile-hero-meta strong {
+  color: #0f172a;
+  font-size: 1.35rem;
+}
+
+.profile-detail-item {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: 10px;
+  align-items: start;
+}
+
+.profile-detail-item svg {
+  grid-row: span 2;
+  margin-top: 2px;
+  color: #2563eb;
+}
+
+.membership-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.renewal-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.renewal-summary span,
+.renewal-summary small {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.renewal-summary strong {
+  font-size: 1.25rem;
+}
+
+.profile-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.profile-card-heading h3 {
+  margin: 0;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.empty-inline {
+  padding: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  text-align: center;
+  font-weight: 700;
+}
+
+.compact-history-table {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.compact-history-table table {
+  min-width: 920px;
+}
+
 /* Responsive Profile Page */
 @media (max-width: 1200px) {
   .profile-stats-grid {
@@ -1464,6 +1620,11 @@ th {
     flex-direction: column;
     text-align: center;
     padding: 20px;
+  }
+
+  .profile-hero-meta {
+    width: 100%;
+    text-align: left;
   }
 
   .profile-header-info {
@@ -1495,6 +1656,16 @@ th {
 
   .activity-item {
     flex-direction: column;
+  }
+
+  .member-profile-badges,
+  .profile-card-heading {
+    justify-content: center;
+  }
+
+  .profile-card-heading {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 

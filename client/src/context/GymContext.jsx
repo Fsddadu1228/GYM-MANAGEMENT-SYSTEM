@@ -182,10 +182,79 @@ function getInitials(name) {
     .join('');
 }
 
-function getNextPaymentDue(fromDate = new Date()) {
-  const nextDueDate = new Date(fromDate);
-  nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-  return nextDueDate.toISOString().slice(0, 10);
+function toISODate(dateValue) {
+  const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function addMonths(dateValue, monthCount) {
+  const date = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue);
+  const day = date.getDate();
+  date.setMonth(date.getMonth() + monthCount, 1);
+  const lastDayOfTargetMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(day, lastDayOfTargetMonth));
+  return date;
+}
+
+function addDays(dateValue, dayCount) {
+  const date = dateValue instanceof Date ? new Date(dateValue) : new Date(dateValue);
+  date.setDate(date.getDate() + dayCount);
+  return date;
+}
+
+function getPlanBillingCycle(plan = '') {
+  const normalizedPlan = plan.toLowerCase();
+
+  if (/\b(day|daily)\b/.test(normalizedPlan)) {
+    return { label: 'daily', days: 1 };
+  }
+  if (/\b(week|weekly)\b/.test(normalizedPlan)) {
+    return { label: 'weekly', days: 7 };
+  }
+  if (/\b(quarter|quarterly|3\s*month)\b/.test(normalizedPlan)) {
+    return { label: 'quarterly', months: 3 };
+  }
+  if (/\b(semiannual|semi-annual|6\s*month)\b/.test(normalizedPlan)) {
+    return { label: 'semiannual', months: 6 };
+  }
+  if (/\b(year|yearly|annual|annually|12\s*month)\b/.test(normalizedPlan)) {
+    return { label: 'yearly', months: 12 };
+  }
+
+  return { label: 'monthly', months: 1 };
+}
+
+function getNextPaymentDue(fromDate = new Date(), plan = '') {
+  const billingCycle = getPlanBillingCycle(plan);
+  const nextDueDate = billingCycle.days
+    ? addDays(fromDate, billingCycle.days)
+    : addMonths(fromDate, billingCycle.months);
+  return toISODate(nextDueDate);
+}
+
+function formatShortDate(dateValue) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function buildRenewalDetails(payment, member) {
+  const paidISO = payment.paidISO || toISODate(new Date());
+  const plan = payment.plan || member?.plan || 'Basic';
+  const billingCycle = getPlanBillingCycle(plan);
+  const coverageEnd = getNextPaymentDue(paidISO, plan);
+
+  return {
+    ...payment,
+    plan,
+    paidISO,
+    paid: payment.paid || formatShortDate(paidISO),
+    due: formatShortDate(coverageEnd),
+    billingCycle: billingCycle.label,
+    coverageStart: paidISO,
+    coverageEnd
+  };
 }
 
 async function requestJson(path, token, options = {}) {
@@ -290,7 +359,7 @@ export const GymProvider = ({ children, authToken }) => {
       totalVisits: 0,
       lastVisit: '—',
       attendanceRate: '0%',
-      nextPaymentDue: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().slice(0, 10),
+      nextPaymentDue: getNextPaymentDue(todayStr, memberData.plan),
       paymentMethod: 'Cash',
       lastPayment: '—',
       paymentStatus: memberData.status === 'active' ? 'Paid' : 'Pending'
@@ -365,22 +434,24 @@ export const GymProvider = ({ children, authToken }) => {
     if (!memberToUpdate) return;
 
     const paidDate = payment.paidISO ? new Date(payment.paidISO) : new Date();
+    const nextPaymentDue = payment.coverageEnd || getNextPaymentDue(paidDate, payment.plan || memberToUpdate.plan);
     await updateMember(memberToUpdate.id, {
       paymentMethod: payment.method,
       lastPayment: `${payment.amount} on ${payment.paid}`,
       paymentStatus: 'Paid',
-      nextPaymentDue: getNextPaymentDue(paidDate)
+      nextPaymentDue
     });
   };
 
   const recordPayment = async (paymentData) => {
     const nextId = payments.length > 0 ? Math.max(...payments.map(p => p.id)) + 1 : 1;
-    const newPayment = {
+    const selectedMember = members.find((m) => m.id === paymentData.memberId) || members.find((m) => m.name === paymentData.member);
+    const newPayment = buildRenewalDetails({
       id: nextId,
       invoice: `#${Math.floor(Math.random() * 900000) + 100000}`,
       status: 'paid',
       ...paymentData
-    };
+    }, selectedMember);
 
     if (useApiRef.current) {
       try {
@@ -406,7 +477,8 @@ export const GymProvider = ({ children, authToken }) => {
   const updatePayment = async (id, updatedFields) => {
     const newList = payments.map((p) => {
       if (p.id === id) {
-        return { ...p, ...updatedFields, status: 'paid' };
+        const selectedMember = members.find((m) => m.id === updatedFields.memberId) || members.find((m) => m.name === updatedFields.member);
+        return buildRenewalDetails({ ...p, ...updatedFields, status: 'paid' }, selectedMember);
       }
       return p;
     });

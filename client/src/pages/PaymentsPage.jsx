@@ -112,6 +112,11 @@ export default function PaymentsPage({
     setViewingPayment(null);
   };
 
+  const formatCycle = (cycle) => {
+    if (!cycle) return 'Monthly';
+    return cycle.charAt(0).toUpperCase() + cycle.slice(1);
+  };
+
   const handleFormSubmit = async (e) => {
     e.preventDefault();
 
@@ -355,7 +360,7 @@ export default function PaymentsPage({
                 <th scope="col">Plan</th>
                 <th scope="col">Amount</th>
                 <th scope="col">Method</th>
-                <th scope="col">Due Date</th>
+                <th scope="col">Renewal Date</th>
                 <th scope="col">Paid Date</th>
                 <th scope="col">Status</th>
                 <th scope="col">Actions</th>
@@ -380,7 +385,7 @@ export default function PaymentsPage({
                       <td>{p.plan}</td>
                       <td>{p.amount}</td>
                       <td>{methodDisplay}</td>
-                      <td>{p.due}</td>
+                      <td>{p.coverageEnd || p.due}</td>
                       <td>{p.paid || '—'}</td>
                       <td>
                         <span className={`status-badge ${statusClass}`}>{statusText}</span>
@@ -536,8 +541,20 @@ export default function PaymentsPage({
                   <span>{viewingPayment.plan}</span>
                 </div>
                 <div className="invoice-row">
+                  <strong>Billing Cycle</strong>
+                  <span>{formatCycle(viewingPayment.billingCycle)}</span>
+                </div>
+                <div className="invoice-row">
                   <strong>Amount</strong>
                   <span>{viewingPayment.amount}</span>
+                </div>
+                <div className="invoice-row">
+                  <strong>Coverage Start</strong>
+                  <span>{viewingPayment.coverageStart || viewingPayment.paidISO || 'â€”'}</span>
+                </div>
+                <div className="invoice-row">
+                  <strong>Renewal Date</strong>
+                  <span>{viewingPayment.coverageEnd || viewingPayment.due || 'â€”'}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Method</strong>
