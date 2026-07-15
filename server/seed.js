@@ -3,6 +3,8 @@ require('dotenv').config();
 const connectDB = require('./config/db');
 const Member = require('./models/Member');
 const Payment = require('./models/Payment');
+const User = require('./models/User');
+const { hashPassword } = require('./utils/password');
 
 const DEFAULT_MEMBERS = [
   {
@@ -177,8 +179,22 @@ const DEFAULT_PAYMENTS = [
 async function seed() {
   await connectDB();
 
+  const userCount = await User.countDocuments();
   const memberCount = await Member.countDocuments();
   const paymentCount = await Payment.countDocuments();
+
+  if (userCount === 0) {
+    await User.create({
+      name: 'GymFitness Admin',
+      username: 'coach.amy',
+      email: 'admin@gymfitness.local',
+      passwordHash: hashPassword('gym1234'),
+      role: 'admin'
+    });
+    console.log('Seeded default admin user: coach.amy / gym1234');
+  } else {
+    console.log(`Skipped users (${userCount} already exist)`);
+  }
 
   if (memberCount === 0) {
     await Member.insertMany(DEFAULT_MEMBERS);

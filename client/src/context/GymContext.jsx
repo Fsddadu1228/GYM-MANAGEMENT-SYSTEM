@@ -188,9 +188,13 @@ function getNextPaymentDue(fromDate = new Date()) {
   return nextDueDate.toISOString().slice(0, 10);
 }
 
-async function requestJson(path, options = {}) {
+async function requestJson(path, token, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {})
+    },
     ...options
   });
 
@@ -211,7 +215,7 @@ function readStoredList(key, fallback) {
   }
 }
 
-export const GymProvider = ({ children }) => {
+export const GymProvider = ({ children, authToken }) => {
   const [members, setMembers] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -224,8 +228,8 @@ export const GymProvider = ({ children }) => {
     async function loadData() {
       try {
         const [apiMembers, apiPayments] = await Promise.all([
-          requestJson('/members'),
-          requestJson('/payments')
+          requestJson('/members', authToken),
+          requestJson('/payments', authToken)
         ]);
 
         if (!isMounted) return;
@@ -255,7 +259,7 @@ export const GymProvider = ({ children }) => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [authToken]);
 
   // Save changes helper
   const updateMembersList = (newList) => {
@@ -294,7 +298,7 @@ export const GymProvider = ({ children }) => {
     if (useApiRef.current) {
       try {
         const { id: _id, ...memberPayload } = newMember;
-        const createdMember = await requestJson('/members', {
+        const createdMember = await requestJson('/members', authToken, {
           method: 'POST',
           body: JSON.stringify(memberPayload)
         });
@@ -324,7 +328,7 @@ export const GymProvider = ({ children }) => {
 
     if (useApiRef.current && updatedMember) {
       try {
-        const savedMember = await requestJson(`/members/${id}`, {
+        const savedMember = await requestJson(`/members/${id}`, authToken, {
           method: 'PUT',
           body: JSON.stringify(updatedMember)
         });
@@ -343,7 +347,7 @@ export const GymProvider = ({ children }) => {
   const deleteMember = async (id) => {
     if (useApiRef.current) {
       try {
-        await requestJson(`/members/${id}`, { method: 'DELETE' });
+        await requestJson(`/members/${id}`, authToken, { method: 'DELETE' });
       } catch (err) {
         console.error('Failed to delete member:', err);
         return false;
@@ -381,7 +385,7 @@ export const GymProvider = ({ children }) => {
     if (useApiRef.current) {
       try {
         const { id: _id, ...paymentPayload } = newPayment;
-        const createdPayment = await requestJson('/payments', {
+        const createdPayment = await requestJson('/payments', authToken, {
           method: 'POST',
           body: JSON.stringify(paymentPayload)
         });
@@ -411,7 +415,7 @@ export const GymProvider = ({ children }) => {
 
     if (useApiRef.current && updatedPayment) {
       try {
-        const savedPayment = await requestJson(`/payments/${id}`, {
+        const savedPayment = await requestJson(`/payments/${id}`, authToken, {
           method: 'PUT',
           body: JSON.stringify(updatedPayment)
         });

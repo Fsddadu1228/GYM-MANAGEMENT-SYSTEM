@@ -1,27 +1,28 @@
 import React, { useState } from 'react';
 import { ArrowRight, CheckCircle, Dumbbell, KeyRound, Lock, UserRound, Zap } from 'lucide-react';
 
-export default function LoginPage({ onLogin }) {
+export default function LoginPage({ onLogin, requestAuth }) {
   const [username, setUsername] = useState('coach.amy');
   const [password, setPassword] = useState('gym1234');
   const [rememberMe, setRememberMe] = useState(true);
   const [status, setStatus] = useState('idle');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus('loading');
 
-    window.setTimeout(() => {
-      if (username.trim() === 'coach.amy' && password === 'gym1234') {
-        setStatus('success');
-        window.setTimeout(() => {
-          onLogin({ username: username.trim(), rememberMe });
-        }, 450);
-        return;
-      }
-
+    try {
+      const auth = await requestAuth('/login', {
+        method: 'POST',
+        body: JSON.stringify({ username: username.trim(), password })
+      });
+      setStatus('success');
+      window.setTimeout(() => {
+        onLogin({ ...auth, rememberMe });
+      }, 350);
+    } catch {
       setStatus('error');
-    }, 650);
+    }
   };
 
   return (
@@ -84,7 +85,7 @@ export default function LoginPage({ onLogin }) {
           </div>
 
           {status === 'error' && (
-            <p className="login-error">Invalid demo credentials. Use coach.amy / gym1234.</p>
+            <p className="login-error">Invalid username or password.</p>
           )}
 
           <button type="submit" className={`login-submit ${status === 'success' ? 'is-success' : ''}`} disabled={status === 'loading'}>
