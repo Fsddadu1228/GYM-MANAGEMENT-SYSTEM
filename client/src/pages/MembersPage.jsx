@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useState, useEffect } from 'react';
 import { GymContext } from '../context/GymContextObject';
-import { Search, X } from 'lucide-react';
+import { Download, Printer, Search, X } from 'lucide-react';
 
 export default function MembersPage({
   setActivePage,
@@ -309,6 +309,128 @@ export default function MembersPage({
     return buttons;
   };
 
+  const csvCell = (value) => {
+    const text = String(value ?? '').replace(/"/g, '""');
+    return `"${text}"`;
+  };
+
+  const escapeHtml = (value) => {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  const downloadTextFile = (filename, content, type = 'text/csv;charset=utf-8') => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportMembersCsv = () => {
+    const headers = [
+      'Member ID',
+      'Name',
+      'Email',
+      'Phone',
+      'Plan',
+      'Status',
+      'Join Date',
+      'Renewal Date',
+      'Payment Status',
+      'Payment Method',
+      'Address',
+      'Emergency Contact',
+      'Emergency Phone'
+    ];
+    const rows = filtered.map((member) => [
+      `MEM-${String(member.id).padStart(3, '0')}`,
+      member.name,
+      member.email,
+      member.phone,
+      member.plan,
+      member.status,
+      member.joined,
+      member.nextPaymentDue,
+      member.paymentStatus,
+      member.paymentMethod,
+      member.address,
+      member.emergencyName,
+      member.emergencyPhone
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+    downloadTextFile(`FitnessGym-members-${todayISO}.csv`, csv);
+  };
+
+  const handlePrintMembersReport = () => {
+    const rowsHtml = filtered.map((member) => `
+      <tr>
+        <td>MEM-${String(member.id).padStart(3, '0')}</td>
+        <td>${escapeHtml(member.name)}</td>
+        <td>${escapeHtml(member.email)}</td>
+        <td>${escapeHtml(member.plan)}</td>
+        <td>${escapeHtml(member.status)}</td>
+        <td>${escapeHtml(member.nextPaymentDue || 'Not set')}</td>
+        <td>${escapeHtml(member.paymentStatus || 'Pending')}</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Popup blocker detected. Please allow popups to print the report.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+      <head>
+        <title>FitnessGym Members Report</title>
+        <style>
+          body { font-family: Segoe UI, Arial, sans-serif; padding: 32px; color: #172033; }
+          h1 { margin: 0 0 6px; }
+          p { margin: 0 0 22px; color: #64748b; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th { text-align: left; color: #334155; background: #eef2f7; }
+          th, td { padding: 9px 10px; border-bottom: 1px solid #dbe4ef; }
+          .summary { display: flex; gap: 18px; margin: 18px 0; }
+          .summary div { border: 1px solid #dbe4ef; border-radius: 10px; padding: 10px 14px; }
+          .summary strong { display: block; font-size: 20px; }
+        </style>
+      </head>
+      <body>
+        <h1>FitnessGym Members Report</h1>
+        <p>Generated ${new Date().toLocaleString()} · ${filtered.length} filtered members</p>
+        <section class="summary">
+          <div><strong>${totalCount}</strong>Total members</div>
+          <div><strong>${activeCount}</strong>Active</div>
+          <div><strong>${pendingCount}</strong>Pending</div>
+          <div><strong>${inactiveCount}</strong>Inactive</div>
+        </section>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th><th>Name</th><th>Email</th><th>Plan</th><th>Status</th><th>Renewal</th><th>Payment</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml || '<tr><td colspan="7">No members found.</td></tr>'}</tbody>
+        </table>
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div style={{ width: '100%' }}>
       <header className="topbar">
@@ -316,9 +438,17 @@ export default function MembersPage({
           <p className="eyebrow">Gym management</p>
           <h1>Members</h1>
         </div>
-        <button onClick={triggerAddModal} className="primary-btn" type="button">
-          + Add new member
-        </button>
+        <div className="report-actions">
+          <button onClick={handleExportMembersCsv} className="secondary-btn icon-text-btn" type="button">
+            <Download size={16} /> CSV
+          </button>
+          <button onClick={handlePrintMembersReport} className="secondary-btn icon-text-btn" type="button">
+            <Printer size={16} /> PDF
+          </button>
+          <button onClick={triggerAddModal} className="primary-btn" type="button">
+            + Add new member
+          </button>
+        </div>
       </header>
 
       {/* Stats KPI Widgets */}

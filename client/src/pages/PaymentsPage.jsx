@@ -162,6 +162,119 @@ export default function PaymentsPage({
     return getPaymentMember(payment)?.name || payment.member || 'Unknown member';
   };
 
+  const csvCell = (value) => {
+    const text = String(value ?? '').replace(/"/g, '""');
+    return `"${text}"`;
+  };
+
+  const downloadTextFile = (filename, content, type = 'text/csv;charset=utf-8') => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPaymentsCsv = () => {
+    const headers = [
+      'Payment ID',
+      'Invoice',
+      'Member ID',
+      'Member Name',
+      'Plan',
+      'Amount',
+      'Method',
+      'Status',
+      'Paid Date',
+      'Renewal Date',
+      'Reference',
+      'Notes'
+    ];
+    const rows = filtered.map((payment) => [
+      payment.id,
+      payment.invoice,
+      payment.memberId ? `MEM-${String(payment.memberId).padStart(3, '0')}` : '',
+      getPaymentMemberName(payment),
+      payment.plan,
+      payment.amount,
+      formatMethod(payment.method),
+      payment.status,
+      payment.paidISO || payment.paid,
+      payment.coverageEnd || payment.due,
+      payment.ref,
+      payment.notes
+    ]);
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+    downloadTextFile(`FitnessGym-payments-${todayISO}.csv`, csv);
+  };
+
+  const handlePrintPaymentsReport = () => {
+    const rowsHtml = filtered.map((payment) => `
+      <tr>
+        <td>${escapeHtml(payment.invoice)}</td>
+        <td>${payment.memberId ? `MEM-${String(payment.memberId).padStart(3, '0')}` : ''}</td>
+        <td>${escapeHtml(getPaymentMemberName(payment))}</td>
+        <td>${escapeHtml(payment.plan)}</td>
+        <td>${escapeHtml(payment.amount)}</td>
+        <td>${escapeHtml(formatMethod(payment.method))}</td>
+        <td>${escapeHtml(payment.status)}</td>
+        <td>${escapeHtml(payment.paidISO || payment.paid || '')}</td>
+        <td>${escapeHtml(payment.coverageEnd || payment.due || '')}</td>
+      </tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Popup blocker detected. Please allow popups to print the report.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+      <head>
+        <title>FitnessGym Payments Report</title>
+        <style>
+          body { font-family: Segoe UI, Arial, sans-serif; padding: 32px; color: #172033; }
+          h1 { margin: 0 0 6px; }
+          p { margin: 0 0 22px; color: #64748b; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th { text-align: left; color: #334155; background: #eef2f7; }
+          th, td { padding: 9px 10px; border-bottom: 1px solid #dbe4ef; }
+          .summary { display: flex; gap: 18px; margin: 18px 0; }
+          .summary div { border: 1px solid #dbe4ef; border-radius: 10px; padding: 10px 14px; }
+          .summary strong { display: block; font-size: 20px; }
+        </style>
+      </head>
+      <body>
+        <h1>FitnessGym Payments Report</h1>
+        <p>Generated ${new Date().toLocaleString()} · ${filtered.length} filtered payments</p>
+        <section class="summary">
+          <div><strong>₱${totalRevenue.toLocaleString('en-PH')}</strong>Total revenue</div>
+          <div><strong>₱${paidToday.toLocaleString('en-PH')}</strong>Paid today</div>
+          <div><strong>${pendingCount}</strong>Pending</div>
+          <div><strong>${overdueCount}</strong>Overdue</div>
+        </section>
+        <table>
+          <thead>
+            <tr>
+              <th>Invoice</th><th>Member ID</th><th>Member</th><th>Plan</th><th>Amount</th><th>Method</th><th>Status</th><th>Paid</th><th>Renewal</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml || '<tr><td colspan="9">No payments found.</td></tr>'}</tbody>
+        </table>
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const escapeHtml = (value) => {
     return String(value ?? '')
       .replace(/&/g, '&amp;')
@@ -414,9 +527,17 @@ export default function PaymentsPage({
           <p className="eyebrow">Gym management</p>
           <h1>Payments</h1>
         </div>
-        <button onClick={triggerRecordModal} className="primary-btn" type="button">
-          + Record payment
-        </button>
+        <div className="report-actions">
+          <button onClick={handleExportPaymentsCsv} className="secondary-btn icon-text-btn" type="button">
+            <Download size={16} /> CSV
+          </button>
+          <button onClick={handlePrintPaymentsReport} className="secondary-btn icon-text-btn" type="button">
+            <Printer size={16} /> PDF
+          </button>
+          <button onClick={triggerRecordModal} className="primary-btn" type="button">
+            + Record payment
+          </button>
+        </div>
       </header>
 
       {/* KPI Stats widgets */}
