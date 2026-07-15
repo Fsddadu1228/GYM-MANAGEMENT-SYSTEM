@@ -17,9 +17,11 @@ export default function ReportsPage() {
   const [planVal, setPlanVal] = useState('all');
   const [statusVal, setStatusVal] = useState('all');
 
+  const normalizePlan = (plan) => String(plan || '').toLowerCase();
+
   // Filter payments
   const filteredPayments = payments.filter((p) => {
-    if (planVal !== 'all' && p.plan.toLowerCase() !== planVal) return false;
+    if (planVal !== 'all' && normalizePlan(p.plan) !== planVal) return false;
     if (statusVal !== 'all' && p.status !== statusVal) return false;
 
     const pDate = p.paidISO || p.dueISO;
@@ -32,7 +34,7 @@ export default function ReportsPage() {
 
   // Filter members
   const filteredMembers = members.filter((m) => {
-    if (planVal !== 'all' && m.plan.toLowerCase() !== planVal) return false;
+    if (planVal !== 'all' && normalizePlan(m.plan) !== planVal) return false;
     if (statusVal !== 'all' && m.status !== statusVal) return false;
 
     if (m.joined) {
@@ -49,6 +51,7 @@ export default function ReportsPage() {
 
   const currentMonthIndex = new Date().getMonth();
   const currentYear = new Date().getFullYear();
+  const trendFilterLabel = 'Values follow current filters';
   const monthlyRevenue = filteredPayments
     .filter((p) => {
       if (p.status !== 'paid' || !p.paidISO) return false;
@@ -80,12 +83,11 @@ export default function ReportsPage() {
   })();
 
   const barChartData = last4Months.map((m) => {
-    const rev = payments
+    const rev = filteredPayments
       .filter((p) => {
         if (p.status !== 'paid' || !p.paidISO) return false;
         const d = new Date(p.paidISO);
-        const matchesPlan = planVal === 'all' || p.plan.toLowerCase() === planVal;
-        return d.getMonth() === m.monthIndex && d.getFullYear() === m.year && matchesPlan;
+        return d.getMonth() === m.monthIndex && d.getFullYear() === m.year;
       })
       .reduce((sum, p) => sum + Number((p.amount || '').replace(/[₱,]/g, '')), 0);
     return { ...m, revenue: rev };
@@ -111,19 +113,17 @@ export default function ReportsPage() {
   const growthTimeline = (() => {
     // Cumulative calculation
     const startOfTimeline = new Date(last5Months[0].year, last5Months[0].monthIndex, 1);
-    let baseCount = members.filter((m) => {
+    let baseCount = filteredMembers.filter((m) => {
       if (!m.joined) return false;
       const d = new Date(m.joined);
-      const matchesPlan = planVal === 'all' || m.plan.toLowerCase() === planVal;
-      return d < startOfTimeline && matchesPlan;
+      return d < startOfTimeline;
     }).length;
 
     return last5Months.map((m) => {
-      const count = members.filter((member) => {
+      const count = filteredMembers.filter((member) => {
         if (!member.joined) return false;
         const d = new Date(member.joined);
-        const matchesPlan = planVal === 'all' || member.plan.toLowerCase() === planVal;
-        return d.getMonth() === m.monthIndex && d.getFullYear() === m.year && matchesPlan;
+        return d.getMonth() === m.monthIndex && d.getFullYear() === m.year;
       }).length;
       baseCount += count;
       return { ...m, cumulative: baseCount };
@@ -195,6 +195,7 @@ export default function ReportsPage() {
         <article className="stat-card">
           <h3>Total Revenue</h3>
           <p className="stat-value">{formatPHP(totalRevenue)}</p>
+          <small className="stat-note">Paid payments only</small>
         </article>
         <article className="stat-card">
           <h3>Monthly Revenue</h3>
@@ -279,7 +280,7 @@ export default function ReportsPage() {
             <div className="chart-card-header">
               <div>
                 <h3>Monthly Revenue</h3>
-                <p>Last 4 months</p>
+                <p>Last 4 months - {trendFilterLabel}</p>
               </div>
             </div>
             <div className="chart-placeholder chart-bar" aria-label="Monthly revenue by month" style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-around' }}>
@@ -303,7 +304,7 @@ export default function ReportsPage() {
             <div className="chart-card-header">
               <div>
                 <h3>Member Growth</h3>
-                <p>New signups (cumulative)</p>
+                <p>New signups (cumulative) - {trendFilterLabel}</p>
               </div>
             </div>
             <div className="chart-placeholder chart-line" aria-label="Member growth by month">
