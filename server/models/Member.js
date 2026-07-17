@@ -23,8 +23,7 @@ const memberSchema = new mongoose.Schema(
     emergencyName: { type: String, default: '', trim: true, maxlength: 80 },
     emergencyRelation: { type: String, default: '', trim: true, maxlength: 40 },
     emergencyPhone: { type: String, default: '', trim: true, maxlength: 40 },
-    avatar: { type: String, default: '' },
-    photo: { type: String, default: '' }
+    avatar: { type: String, default: '' }
   },
   { timestamps: true }
 );

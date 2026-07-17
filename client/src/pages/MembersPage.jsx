@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useState, useEffect } from 'react';
 import { GymContext } from '../context/GymContextObject';
-import { Download, Printer, Search, X } from 'lucide-react';
+import { Clock3, Download, Printer, Search, UserCheck, Users, UserX, X } from 'lucide-react';
 import { notify } from '../utils/toast';
 import { formatDisplayDate, toLocalISODate } from '../utils/formatters';
 
@@ -43,7 +43,6 @@ export default function MembersPage({
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [dob, setDob] = useState('');
   const [address, setAddress] = useState('');
-  const [photo, setPhoto] = useState('');
 
   // Statistics calculation for filtered records
   const totalCount = members.length;
@@ -130,17 +129,6 @@ export default function MembersPage({
   const endIdx = Math.min(startIdx + pageSize, totalMatches);
   const paginated = filtered.slice(startIdx, endIdx);
 
-  // Avatar conversion helper
-  const handleAvatarChange = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPhoto(reader.result);
-    };
-    reader.readAsDataURL(file);
-  };
-
   const getInitials = (n) => {
     return (n || '')
       .split(' ')
@@ -164,7 +152,6 @@ export default function MembersPage({
     setEmergencyName('');
     setEmergencyRelation('');
     setEmergencyPhone('');
-    setPhoto('');
     setIsModalOpen(true);
   }, []);
 
@@ -189,7 +176,6 @@ export default function MembersPage({
     setEmergencyName(member.emergencyName || '');
     setEmergencyRelation(member.emergencyRelation || '');
     setEmergencyPhone(member.emergencyPhone || '');
-    setPhoto(member.photo || '');
     setIsModalOpen(true);
   };
 
@@ -217,8 +203,7 @@ export default function MembersPage({
       status,
       emergencyName,
       emergencyRelation,
-      emergencyPhone,
-      photo
+      emergencyPhone
     };
 
     if (modalMode === 'edit' && editingMember) {
@@ -453,19 +438,39 @@ export default function MembersPage({
       {/* Stats KPI Widgets */}
       <section className="stats-grid">
         <article className="stat-card">
-          <h3>Total members</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-total">
+              <Users size={20} />
+            </span>
+            <h3>Total members</h3>
+          </div>
           <p className="stat-value">{totalCount}</p>
         </article>
         <article className="stat-card">
-          <h3>Active</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-active">
+              <UserCheck size={20} />
+            </span>
+            <h3>Active</h3>
+          </div>
           <p className="stat-value active-count">{activeCount}</p>
         </article>
         <article className="stat-card">
-          <h3>Pending</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-pending">
+              <Clock3 size={20} />
+            </span>
+            <h3>Pending</h3>
+          </div>
           <p className="stat-value pending-count">{pendingCount}</p>
         </article>
         <article className="stat-card">
-          <h3>Inactive</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-inactive">
+              <UserX size={20} />
+            </span>
+            <h3>Inactive</h3>
+          </div>
           <p className="stat-value inactive-count">{inactiveCount}</p>
         </article>
       </section>
@@ -601,22 +606,6 @@ export default function MembersPage({
               </select>
             </div>
 
-            <div className="toolbar-group-inline">
-              <label htmlFor="pageSize">Show:</label>
-              <select
-                id="pageSize"
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setCurrentPage(1);
-                }}
-                className="select-inline"
-              >
-                <option value="10">10</option>
-                <option value="25">25</option>
-                <option value="50">50</option>
-              </select>
-            </div>
           </div>
         </div>
 
@@ -657,11 +646,7 @@ export default function MembersPage({
                   const joinedDateStr = formatDisplayDate(member.joined, 'Not set');
                   const renewalDateStr = formatDisplayDate(member.nextPaymentDue);
                   const paymentStatus = (member.paymentStatus || 'Pending').toLowerCase();
-                  const avatarMarkup = member.photo ? (
-                    <div className="avatar">
-                      <img src={member.photo} alt={member.name} />
-                    </div>
-                  ) : (
+                  const avatarMarkup = (
                     <div className="avatar">{member.avatar || getInitials(member.name)}</div>
                   );
 
@@ -747,6 +732,22 @@ export default function MembersPage({
               <span>
                 Showing {startIdx + 1}-{endIdx} of {totalMatches} members
               </span>
+              <label htmlFor="pageSize" className="rows-per-page">
+                <span>Rows per page</span>
+                <select
+                  id="pageSize"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="select-inline"
+                >
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+              </label>
             </div>
             <div className="pagination">{renderPaginationButtons()}</div>
           </div>
@@ -820,17 +821,6 @@ export default function MembersPage({
                   <span>Emergency Phone</span>
                   <input type="text" value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} />
                 </label>
-                <label>
-                  <span>Profile Photo</span>
-                  <input type="file" accept="image/*" onChange={handleAvatarChange} />
-                </label>
-                {photo && (
-                  <div className="avatar-preview-wrap" style={{ marginTop: '8px' }}>
-                    <div className="avatar-preview" style={{ border: 'none' }}>
-                      <img src={photo} alt="Avatar preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="modal-actions">

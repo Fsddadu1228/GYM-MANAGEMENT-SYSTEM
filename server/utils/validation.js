@@ -73,8 +73,7 @@ function validateMemberPayload(input, { partial = false } = {}) {
     'emergencyName',
     'emergencyRelation',
     'emergencyPhone',
-    'avatar',
-    'photo'
+    'avatar'
   ]);
 
   const payload = {};
@@ -135,12 +134,6 @@ function validateMemberPayload(input, { partial = false } = {}) {
   if (payload.emergencyRelation !== undefined) payload.emergencyRelation = cleanOptionalString(payload.emergencyRelation, 40);
   if (payload.emergencyPhone !== undefined) payload.emergencyPhone = cleanOptionalString(payload.emergencyPhone, 40);
   if (payload.avatar !== undefined) payload.avatar = cleanOptionalString(payload.avatar, 4).toUpperCase();
-  if (payload.photo !== undefined) {
-    payload.photo = cleanOptionalString(payload.photo, 500000);
-    if (payload.photo && !payload.photo.startsWith('data:image/')) {
-      throw new Error('Profile photo must be an image data URL');
-    }
-  }
 
   return payload;
 }

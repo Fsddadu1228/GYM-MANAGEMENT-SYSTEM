@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useState, useEffect } from 'react';
 import { GymContext } from '../context/GymContextObject';
-import { Download, Printer, ReceiptText, Search, Trash2, X } from 'lucide-react';
+import { Banknote, CircleAlert, Clock3, Download, Printer, ReceiptText, Search, Trash2, WalletCards, X } from 'lucide-react';
 import { notify } from '../utils/toast';
 import { formatDisplayDate, formatPHP, parseCurrencyAmount, toLocalISODate } from '../utils/formatters';
 
@@ -520,19 +520,39 @@ export default function PaymentsPage({
       {/* KPI Stats widgets */}
       <section className="stats-grid">
         <article className="stat-card">
-          <h3>Total Revenue</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-total">
+              <WalletCards size={20} />
+            </span>
+            <h3>Total Revenue</h3>
+          </div>
           <p className="stat-value">{formatPHP(totalRevenue)}</p>
         </article>
         <article className="stat-card">
-          <h3>Paid Today</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-active">
+              <Banknote size={20} />
+            </span>
+            <h3>Paid Today</h3>
+          </div>
           <p className="stat-value active-count">{formatPHP(paidToday)}</p>
         </article>
         <article className="stat-card">
-          <h3>Pending Payments</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-pending">
+              <Clock3 size={20} />
+            </span>
+            <h3>Pending Payments</h3>
+          </div>
           <p className="stat-value pending-count">{pendingCount}</p>
         </article>
         <article className="stat-card">
-          <h3>Overdue Payments</h3>
+          <div className="stat-card-head">
+            <span className="stat-icon stat-icon-inactive">
+              <CircleAlert size={20} />
+            </span>
+            <h3>Overdue Payments</h3>
+          </div>
           <p className="stat-value inactive-count">{overdueCount}</p>
         </article>
       </section>
@@ -810,26 +830,39 @@ export default function PaymentsPage({
           ========================================================= */}
       {isDetailsOpen && viewingPayment && (
         <div className="modal" aria-hidden="false">
-          <div className="modal-panel">
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h2 style={{ margin: 0, display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                <ReceiptText size={22} /> Payment Receipt
-              </h2>
-              <button onClick={closeDetailsModal} className="modal-close" style={{ position: 'static' }}>
+          <div className="modal-panel receipt-modal-panel">
+            <header className="receipt-modal-header">
+              <div className="receipt-title-wrap">
+                <span className="receipt-title-icon">
+                  <ReceiptText size={20} />
+                </span>
+                <div>
+                  <p>Official receipt</p>
+                  <h2>Payment Receipt</h2>
+                </div>
+              </div>
+              <button onClick={closeDetailsModal} className="modal-close receipt-close">
                 <X size={20} />
               </button>
             </header>
 
-            <div className="modal-body">
-              <div className="payment-invoice">
-                <div className="invoice-row">
-                  <strong>Invoice</strong>
-                  <span>{viewingPayment.invoice}</span>
+            <div className="receipt-modal-body">
+              <section className="receipt-summary">
+                <div>
+                  <span>Invoice</span>
+                  <strong>{viewingPayment.invoice || '-'}</strong>
                 </div>
-                <div className="invoice-row">
-                  <strong>Member</strong>
-                  <span>{getPaymentMemberName(viewingPayment)}</span>
+                <div>
+                  <span>Member</span>
+                  <strong>{getPaymentMemberName(viewingPayment)}</strong>
                 </div>
+                <div className="receipt-summary-amount">
+                  <span>Amount paid</span>
+                  <strong>{formatPHP(viewingPayment.amount)}</strong>
+                </div>
+              </section>
+
+              <div className="payment-invoice receipt-invoice-grid">
                 <div className="invoice-row">
                   <strong>Membership</strong>
                   <span>{viewingPayment.plan}</span>
@@ -837,10 +870,6 @@ export default function PaymentsPage({
                 <div className="invoice-row">
                   <strong>Billing Cycle</strong>
                   <span>{formatCycle(viewingPayment.billingCycle)}</span>
-                </div>
-                <div className="invoice-row">
-                  <strong>Amount</strong>
-                  <span>{formatPHP(viewingPayment.amount)}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Coverage Start</strong>
@@ -862,20 +891,22 @@ export default function PaymentsPage({
                 </div>
                 <div className="invoice-row">
                   <strong>Status</strong>
-                  <span>{viewingPayment.status.toUpperCase()}</span>
+                  <span className={`receipt-status receipt-status-${viewingPayment.status}`}>
+                    {viewingPayment.status.toUpperCase()}
+                  </span>
                 </div>
                 <div className="invoice-row">
                   <strong>Paid Date</strong>
                   <span>{formatDisplayDate(viewingPayment.paidISO, viewingPayment.paid || 'Not recorded')}</span>
                 </div>
-                <div className="invoice-row">
+                <div className="invoice-row invoice-row-full">
                   <strong>Notes</strong>
                   <span>{viewingPayment.notes || '-'}</span>
                 </div>
               </div>
             </div>
 
-            <footer className="modal-actions">
+            <footer className="modal-actions receipt-modal-actions">
               <button onClick={closeDetailsModal} className="secondary-btn">
                 Close
               </button>

@@ -195,7 +195,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
         <div className="profile-header">
           <div className="profile-avatar-large">
             <div className="avatar-large">
-              {member.photo ? <img src={member.photo} alt={member.name} /> : member.avatar || getInitials(member.name)}
+              {member.avatar || getInitials(member.name)}
             </div>
           </div>
           <div className="profile-header-info">
