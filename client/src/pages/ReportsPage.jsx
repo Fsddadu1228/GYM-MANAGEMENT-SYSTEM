@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { Download, Printer } from 'lucide-react';
+import { Activity, AlertTriangle, CreditCard, Download, PieChart, Printer, TrendingUp, Users } from 'lucide-react';
 import { GymContext } from '../context/GymContextObject';
 import { formatDisplayDate, formatPHP, parseCurrencyAmount, toLocalISODate } from '../utils/formatters';
 
@@ -53,6 +53,10 @@ export default function ReportsPage() {
   const totalRevenue = paidPayments.reduce((sum, payment) => sum + parseCurrencyAmount(payment.amount), 0);
   const pendingPayments = paymentsInDateRange.filter((payment) => payment.status === 'pending').length;
   const overduePayments = paymentsInDateRange.filter((payment) => payment.status === 'overdue').length;
+  const paymentCount = paymentsInDateRange.length;
+  const paidPaymentCount = paidPayments.length;
+  const collectionRate = paymentCount > 0 ? Math.round((paidPaymentCount / paymentCount) * 100) : 0;
+  const averagePaidPayment = paidPaymentCount > 0 ? totalRevenue / paidPaymentCount : 0;
   const activeMembers = reportMembers.filter((member) => member.status === 'active').length;
   const inactiveMembers = reportMembers.filter((member) => member.status !== 'active').length;
   const expiredMembers = reportMembers
@@ -91,6 +95,8 @@ export default function ReportsPage() {
 
   const maxRevenue = Math.max(...revenueByMonth.map((item) => item.revenue), 1000);
   const hasRevenueData = revenueByMonth.some((item) => item.revenue > 0);
+  const bestRevenueMonth = revenueByMonth.reduce((best, item) => (item.revenue > best.revenue ? item : best), revenueByMonth[0]);
+  const averageMonthlyRevenue = revenueByMonth.length > 0 ? totalRevenue / revenueByMonth.length : 0;
 
   const methodLabels = {
     cash: 'Cash',
@@ -109,12 +115,65 @@ export default function ReportsPage() {
   });
 
   const maxMethodCount = Math.max(...paymentsByMethod.map((item) => item.count), 1);
+  const topPaymentMethod = paymentsByMethod.reduce((top, item) => (item.revenue > top.revenue ? item : top), paymentsByMethod[0]);
   const totalScopedMembers = activeMembers + inactiveMembers;
   const activePercent = totalScopedMembers > 0 ? Math.round((activeMembers / totalScopedMembers) * 100) : 0;
   const inactivePercent = totalScopedMembers > 0 ? 100 - activePercent : 0;
   const statusDonutStyle = totalScopedMembers > 0
     ? { background: `conic-gradient(#14b8a6 0% ${activePercent}%, #f43f5e ${activePercent}% 100%)` }
     : { background: '#1e293b' };
+  const planColors = ['#4f8cff', '#2dd4bf', '#fbbf24', '#fb7185'];
+  let planCursor = 0;
+  const planBreakdown = Object.entries(reportMembers.reduce((acc, member) => {
+    const plan = member.plan || 'Full Month';
+    acc[plan] = (acc[plan] || 0) + 1;
+    return acc;
+  }, {})).map(([plan, count], index) => {
+    const percentage = totalScopedMembers > 0 ? Math.round((count / totalScopedMembers) * 100) : 0;
+    const start = planCursor;
+    planCursor += percentage;
+    return {
+      plan,
+      count,
+      percentage,
+      color: planColors[index % planColors.length],
+      slice: `${planColors[index % planColors.length]} ${start}% ${planCursor}%`
+    };
+  });
+  const planDonutStyle = planBreakdown.length
+    ? { background: `conic-gradient(${planBreakdown.map((item) => item.slice).join(', ')})` }
+    : { background: '#1e293b' };
+
+  const insightCards = [
+    {
+      label: 'Collection rate',
+      value: `${collectionRate}%`,
+      detail: `${paidPaymentCount} of ${paymentCount} payments collected`,
+      icon: Activity,
+      tone: collectionRate >= 80 ? 'good' : collectionRate >= 50 ? 'warn' : 'risk'
+    },
+    {
+      label: 'Average paid transaction',
+      value: formatPHP(averagePaidPayment),
+      detail: `${paidPaymentCount} paid payment${paidPaymentCount === 1 ? '' : 's'}`,
+      icon: CreditCard,
+      tone: 'neutral'
+    },
+    {
+      label: 'Best revenue month',
+      value: bestRevenueMonth ? bestRevenueMonth.label : '-',
+      detail: bestRevenueMonth ? `${formatPHP(bestRevenueMonth.revenue)} from ${bestRevenueMonth.payments} paid` : 'No revenue yet',
+      icon: TrendingUp,
+      tone: 'good'
+    },
+    {
+      label: 'Top payment method',
+      value: topPaymentMethod ? topPaymentMethod.label : '-',
+      detail: topPaymentMethod ? `${formatPHP(topPaymentMethod.revenue)} collected` : 'No payments yet',
+      icon: PieChart,
+      tone: 'neutral'
+    }
+  ];
 
   const csvCell = (value) => {
     const cleanValue = String(value ?? '');
@@ -146,6 +205,8 @@ export default function ReportsPage() {
       ['Summary', 'Date range', reportRangeLabel],
       ['Summary', 'Total revenue', formatPHP(totalRevenue)],
       ['Summary', 'Payments', paymentsInDateRange.length],
+      ['Summary', 'Collection rate', `${collectionRate}%`],
+      ['Summary', 'Average paid transaction', formatPHP(averagePaidPayment)],
       ['Summary', 'Active members', activeMembers],
       ['Summary', 'Inactive members', inactiveMembers],
       ['Summary', 'Expired memberships', expiredMembers.length],
@@ -155,6 +216,9 @@ export default function ReportsPage() {
       [],
       ['Payments by method', 'Method', 'Payments', 'Paid revenue'],
       ...paymentsByMethod.map((item) => ['Payments by method', item.label, item.count, formatPHP(item.revenue)]),
+      [],
+      ['Plan mix', 'Plan', 'Members', 'Share'],
+      ...planBreakdown.map((item) => ['Plan mix', item.plan, item.count, `${item.percentage}%`]),
       [],
       ['Expired memberships', 'Member', 'Plan', 'Renewal date', 'Status'],
       ...expiredMembers.map((member) => ['Expired memberships', member.name, member.plan, formatDisplayDate(member.nextPaymentDue), member.status])
@@ -206,6 +270,7 @@ export default function ReportsPage() {
           <div><strong>${activeMembers}</strong>Active members</div>
           <div><strong>${expiredMembers.length}</strong>Expired memberships</div>
         </section>
+        <p>Collection rate: ${collectionRate}%. Average paid transaction: ${escapeHtml(formatPHP(averagePaidPayment))}. Top method: ${escapeHtml(topPaymentMethod?.label || '-')}.</p>
         <h2>Revenue by Month</h2>
         <table><thead><tr><th>Month</th><th>Revenue</th><th>Paid payments</th></tr></thead><tbody>${revenueRows}</tbody></table>
         <h2>Payments by Method</h2>
@@ -285,26 +350,46 @@ export default function ReportsPage() {
       </section>
 
       <section className="stats-grid report-kpi-grid">
-        <article className="stat-card">
+        <article className="stat-card report-kpi-card">
+          <span className="report-kpi-icon"><TrendingUp size={18} /></span>
           <h3>Total Revenue</h3>
           <p className="stat-value">{formatPHP(totalRevenue)}</p>
           <small className="stat-note">Paid payments only</small>
         </article>
-        <article className="stat-card">
+        <article className="stat-card report-kpi-card">
+          <span className="report-kpi-icon"><CreditCard size={18} /></span>
           <h3>Payments</h3>
           <p className="stat-value">{paymentsInDateRange.length}</p>
           <small className="stat-note">{pendingPayments} pending, {overduePayments} overdue</small>
         </article>
-        <article className="stat-card">
+        <article className="stat-card report-kpi-card">
+          <span className="report-kpi-icon"><Users size={18} /></span>
           <h3>Active Members</h3>
           <p className="stat-value">{activeMembers}</p>
           <small className="stat-note">{inactiveMembers} inactive or pending</small>
         </article>
-        <article className="stat-card">
+        <article className="stat-card report-kpi-card">
+          <span className="report-kpi-icon"><AlertTriangle size={18} /></span>
           <h3>Expired Memberships</h3>
           <p className="stat-value">{expiredMembers.length}</p>
           <small className="stat-note">Renewal date before {todayISO}</small>
         </article>
+      </section>
+
+      <section className="report-insight-grid" aria-label="Report insights">
+        {insightCards.map((insight) => {
+          const Icon = insight.icon;
+          return (
+            <article key={insight.label} className={`report-insight-card insight-${insight.tone}`}>
+              <span><Icon size={18} /></span>
+              <div>
+                <small>{insight.label}</small>
+                <strong>{insight.value}</strong>
+                <p>{insight.detail}</p>
+              </div>
+            </article>
+          );
+        })}
       </section>
 
       <section className="charts-grid reports-business-grid">
@@ -327,15 +412,22 @@ export default function ReportsPage() {
                 <div className="axis-lines"></div>
                 <div className="chart-y-axis">
                   <span>{formatPHP(maxRevenue)}</span>
-                  <span>{formatPHP(maxRevenue / 2)}</span>
+                  <span>{formatPHP(averageMonthlyRevenue)}</span>
                   <span>0</span>
+                </div>
+                <div
+                  className="report-average-line"
+                  style={{ bottom: `${76 + Math.min((averageMonthlyRevenue / maxRevenue) * 190, 190)}px` }}
+                >
+                  <span>Avg {formatPHP(averageMonthlyRevenue)}</span>
                 </div>
                 {revenueByMonth.map((item) => {
                   const heightPercent = item.revenue > 0 ? Math.max((item.revenue / maxRevenue) * 88, 12) : 0;
+                  const isBestMonth = bestRevenueMonth && item.key === bestRevenueMonth.key && item.revenue > 0;
                   return (
                     <div key={item.key} className="revenue-bar-wrap report-revenue-bar-wrap" title={`${item.label}: ${formatPHP(item.revenue)}`}>
                       <div className="report-bar-track">
-                        <div className={`revenue-bar report-revenue-bar ${item.revenue === 0 ? 'is-empty' : ''}`} style={{ height: `${heightPercent}%` }}>
+                        <div className={`revenue-bar report-revenue-bar ${item.revenue === 0 ? 'is-empty' : ''} ${isBestMonth ? 'is-peak' : ''}`} style={{ height: `${heightPercent}%` }}>
                           {item.revenue > 0 && <span>{formatPHP(item.revenue)}</span>}
                         </div>
                       </div>
@@ -399,6 +491,37 @@ export default function ReportsPage() {
                 <p>Inactive / pending</p>
                 <strong>{inactiveMembers} ({inactivePercent}%)</strong>
               </div>
+            </div>
+          </div>
+        </article>
+
+        <article className="chart-card report-chart-card">
+          <div className="chart-card-header">
+            <div>
+              <h3>Plan Mix</h3>
+              <p>Members grouped by current membership type.</p>
+            </div>
+          </div>
+          <div className="report-plan-layout">
+            <div className="donut-chart report-plan-donut" style={planDonutStyle}>
+              <span>
+                {totalScopedMembers}
+                <small>members</small>
+              </span>
+            </div>
+            <div className="report-plan-list">
+              {planBreakdown.length === 0 ? (
+                <div className="chart-empty-state">No members match these filters.</div>
+              ) : (
+                planBreakdown.map((item) => (
+                  <div key={item.plan} className="report-plan-row">
+                    <span className="legend-dot" style={{ background: item.color }}></span>
+                    <strong>{item.plan}</strong>
+                    <small>{item.count} members</small>
+                    <b>{item.percentage}%</b>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </article>
