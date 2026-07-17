@@ -46,13 +46,7 @@ export default function ReportsPage() {
   const reportMembers = members.filter((member) => {
     if (planVal !== 'all' && normalizePlan(member.plan) !== planVal) return false;
     if (memberStatusVal !== 'all' && normalize(member.status) !== memberStatusVal) return false;
-
-    const memberPaymentsInRange = paymentsInDateRange.some((payment) => (
-      (payment.memberId && Number(payment.memberId) === Number(member.id)) ||
-      normalize(payment.member) === normalize(member.name)
-    ));
-
-    return dateInRange(member.joined) || dateInRange(member.nextPaymentDue) || memberPaymentsInRange;
+    return true;
   });
 
   const paidPayments = paymentsInDateRange.filter((payment) => payment.status === 'paid');
@@ -62,7 +56,7 @@ export default function ReportsPage() {
   const activeMembers = reportMembers.filter((member) => member.status === 'active').length;
   const inactiveMembers = reportMembers.filter((member) => member.status !== 'active').length;
   const expiredMembers = reportMembers
-    .filter((member) => member.nextPaymentDue && member.nextPaymentDue < todayISO)
+    .filter((member) => member.nextPaymentDue && member.nextPaymentDue < todayISO && dateInRange(member.nextPaymentDue))
     .sort((a, b) => String(a.nextPaymentDue).localeCompare(String(b.nextPaymentDue)));
 
   const monthBuckets = (() => {
@@ -384,7 +378,7 @@ export default function ReportsPage() {
           <div className="chart-card-header">
             <div>
               <h3>Active vs Inactive Members</h3>
-              <p>Membership status inside the current report scope.</p>
+              <p>Membership status inside the current member filters.</p>
             </div>
           </div>
           <div className="report-status-layout">

@@ -90,7 +90,6 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
     { label: 'Active members', value: activeMembers, sub: `${totalMembers} total members`, icon: Users },
     { label: 'Expired members', value: expiredMembers.length, sub: 'Needs immediate follow-up', icon: CalendarClock },
     { label: 'Upcoming renewals', value: upcomingRenewals.length, sub: 'Due in the next 14 days', icon: ReceiptText },
-    { label: 'Pending payments', value: pendingPaymentItems.length, sub: 'Pending or overdue invoices', icon: CreditCard },
     { label: 'New this month', value: newMembersThisMonth.length, sub: 'Recently joined members', icon: UserPlus }
   ];
 

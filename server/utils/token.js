@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 
 const TOKEN_TTL_MS = 1000 * 60 * 60 * 12;
+const AUTH_SECRET = process.env.AUTH_SECRET;
 
-function getSecret() {
-  return process.env.AUTH_SECRET || 'gymfitness-local-development-secret';
+if (!AUTH_SECRET) {
+  throw new Error('AUTH_SECRET environment variable is required');
 }
 
 function encode(value) {
@@ -11,7 +12,7 @@ function encode(value) {
 }
 
 function sign(payload) {
-  return crypto.createHmac('sha256', getSecret()).update(payload).digest('base64url');
+  return crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
 }
 
 function createToken(user) {

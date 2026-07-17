@@ -1617,6 +1617,31 @@ th {
   font-weight: 700;
 }
 
+.payment-summary-cell {
+  display: grid;
+  gap: 4px;
+  align-items: start;
+}
+
+.payment-summary-cell strong {
+  color: var(--text-primary);
+  font-size: 0.88rem;
+}
+
+.payment-summary-cell small {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.payment-summary-cell .payment-ok {
+  color: #34d399;
+}
+
+.payment-summary-cell .payment-attention {
+  color: #fbbf24;
+}
+
 /* Professional dashboard operations layout */
 .dashboard-pro {
   display: grid;
@@ -2758,8 +2783,6 @@ textarea:focus-visible {
 }
 
 .donut-chart {
-  background:
-    conic-gradient(#4f8cff 0 46%, #2dd4bf 46% 74%, #fbbf24 74% 100%) !important;
   box-shadow: 0 18px 34px rgba(79, 140, 255, 0.2) !important;
 }
 

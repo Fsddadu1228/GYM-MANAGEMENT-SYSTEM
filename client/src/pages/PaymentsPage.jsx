@@ -466,8 +466,8 @@ export default function PaymentsPage({
     const buttons = [];
     if (activeCurrentPage > 1) {
       buttons.push(
-        <button key="first" onClick={() => setCurrentPage(1)} className="page-btn">« First</button>,
-        <button key="prev" onClick={() => setCurrentPage(activeCurrentPage - 1)} className="page-btn">‹ Prev</button>
+        <button key="first" onClick={() => setCurrentPage(1)} className="page-btn">First</button>,
+        <button key="prev" onClick={() => setCurrentPage(activeCurrentPage - 1)} className="page-btn">Prev</button>
       );
     }
 
@@ -489,8 +489,8 @@ export default function PaymentsPage({
 
     if (activeCurrentPage < totalPages) {
       buttons.push(
-        <button key="next" onClick={() => setCurrentPage(activeCurrentPage + 1)} className="page-btn">Next ›</button>,
-        <button key="last" onClick={() => setCurrentPage(totalPages)} className="page-btn">Last »</button>
+        <button key="next" onClick={() => setCurrentPage(activeCurrentPage + 1)} className="page-btn">Next</button>,
+        <button key="last" onClick={() => setCurrentPage(totalPages)} className="page-btn">Last</button>
       );
     }
 

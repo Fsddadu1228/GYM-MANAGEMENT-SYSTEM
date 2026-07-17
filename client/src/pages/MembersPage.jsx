@@ -276,8 +276,8 @@ export default function MembersPage({
     const buttons = [];
     if (activeCurrentPage > 1) {
       buttons.push(
-        <button key="first" onClick={() => setCurrentPage(1)} className="page-btn">« First</button>,
-        <button key="prev" onClick={() => setCurrentPage(activeCurrentPage - 1)} className="page-btn">‹ Prev</button>
+        <button key="first" onClick={() => setCurrentPage(1)} className="page-btn">First</button>,
+        <button key="prev" onClick={() => setCurrentPage(activeCurrentPage - 1)} className="page-btn">Prev</button>
       );
     }
 
@@ -300,8 +300,8 @@ export default function MembersPage({
 
     if (activeCurrentPage < totalPages) {
       buttons.push(
-        <button key="next" onClick={() => setCurrentPage(activeCurrentPage + 1)} className="page-btn">Next ›</button>,
-        <button key="last" onClick={() => setCurrentPage(totalPages)} className="page-btn">Last »</button>
+        <button key="next" onClick={() => setCurrentPage(activeCurrentPage + 1)} className="page-btn">Next</button>,
+        <button key="last" onClick={() => setCurrentPage(totalPages)} className="page-btn">Last</button>
       );
     }
 
@@ -700,10 +700,12 @@ export default function MembersPage({
                         </span>
                       </td>
                       <td>
-                        <span className={`status-badge ${paymentStatus === 'paid' ? 'status-active' : 'status-pending'}`}>
-                          {member.paymentStatus || 'Pending'}
-                        </span>
-                        <small className="table-subtext">{formatPaymentMethod(member.paymentMethod)}</small>
+                        <div className="payment-summary-cell">
+                          <strong className={paymentStatus === 'paid' ? 'payment-ok' : 'payment-attention'}>
+                            {member.paymentStatus || 'Pending'}
+                          </strong>
+                          <small>{formatPaymentMethod(member.paymentMethod)}</small>
+                        </div>
                       </td>
                       <td>{joinedDateStr}</td>
                       <td>
