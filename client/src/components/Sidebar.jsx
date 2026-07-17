@@ -1,7 +1,7 @@
 import React from 'react';
 import { LayoutDashboard, Users, CreditCard, TrendingUp, LogOut } from 'lucide-react';
 
-export default function Sidebar({ activePage, setActivePage, onLogout }) {
+export default function Sidebar({ activePage, setActivePage, onLogout, currentUser }) {
   const navItems = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
     { id: 'members', name: 'Members', icon: Users },
@@ -14,6 +14,9 @@ export default function Sidebar({ activePage, setActivePage, onLogout }) {
       <div className="brand">
         <h2>FitnessGym</h2>
         <p>Member Control</p>
+        {currentUser && (
+          <span className="role-chip">{currentUser.role === 'admin' ? 'Admin' : 'Staff'}</span>
+        )}
       </div>
 
       <nav className="nav-links">

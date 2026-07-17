@@ -9,6 +9,12 @@ const { members: DEFAULT_MEMBERS, payments: DEFAULT_PAYMENTS } = require('../cli
 
 async function seed() {
   await connectDB();
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  const staffPassword = process.env.SEED_STAFF_PASSWORD;
+
+  if (!adminPassword || !staffPassword) {
+    throw new Error('SEED_ADMIN_PASSWORD and SEED_STAFF_PASSWORD are required to seed users');
+  }
 
   await User.updateOne(
     { email: 'admin@gymfitness.local' },
@@ -17,13 +23,28 @@ async function seed() {
         name: 'GymFitness Admin',
         username: 'admin.gym',
         email: 'admin@gymfitness.local',
-        passwordHash: hashPassword('gym1234'),
+        passwordHash: hashPassword(adminPassword),
         role: 'admin'
       }
     },
     { upsert: true }
   );
-  console.log('Upserted default admin user: admin.gym / gym1234');
+  console.log('Upserted default admin user: admin.gym');
+
+  await User.updateOne(
+    { email: 'staff@gymfitness.local' },
+    {
+      $set: {
+        name: 'GymFitness Staff',
+        username: 'staff.gym',
+        email: 'staff@gymfitness.local',
+        passwordHash: hashPassword(staffPassword),
+        role: 'staff'
+      }
+    },
+    { upsert: true }
+  );
+  console.log('Upserted default staff user: staff.gym');
 
   await Member.bulkWrite(
     DEFAULT_MEMBERS.map((member) => ({

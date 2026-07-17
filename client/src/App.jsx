@@ -175,7 +175,7 @@ function App() {
   }
 
   return (
-    <GymProvider authToken={authToken}>
+    <GymProvider authToken={authToken} currentUser={currentUser}>
       <div className="page-shell">
         <Sidebar activePage={activePage} setActivePage={setActivePage} onLogout={handleLogout} currentUser={currentUser} />
         <main className="main-content">

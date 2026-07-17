@@ -136,7 +136,7 @@ function readStoredList(key, fallback) {
   }
 }
 
-export const GymProvider = ({ children, authToken }) => {
+export const GymProvider = ({ children, authToken, currentUser }) => {
   const [members, setMembers] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -284,6 +284,7 @@ export const GymProvider = ({ children, authToken }) => {
   };
 
   const deleteMember = async (id) => {
+    if (currentUser?.role !== 'admin') return false;
     if (useApiRef.current) {
       try {
         await requestJson(`/members/${id}`, authToken, { method: 'DELETE' });
@@ -376,6 +377,7 @@ export const GymProvider = ({ children, authToken }) => {
   };
 
   const deletePayment = async (id) => {
+    if (currentUser?.role !== 'admin') return false;
     if (useApiRef.current) {
       try {
         await requestJson(`/payments/${id}`, authToken, { method: 'DELETE' });
@@ -394,6 +396,8 @@ export const GymProvider = ({ children, authToken }) => {
       members,
       payments,
       loading,
+      currentUser,
+      isAdmin: currentUser?.role === 'admin',
       addMember,
       updateMember,
       deleteMember,

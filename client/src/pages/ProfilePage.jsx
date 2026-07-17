@@ -19,7 +19,7 @@ import { notify } from '../utils/toast';
 import { formatDisplayDate, formatPHP } from '../utils/formatters';
 
 export default function ProfilePage({ memberId, setActivePage }) {
-  const { members, payments, updateMember, deleteMember } = useContext(GymContext);
+  const { members, payments, updateMember, deleteMember, isAdmin } = useContext(GymContext);
 
   const member = members.find((m) => m.id === memberId);
 
@@ -183,9 +183,11 @@ export default function ProfilePage({ memberId, setActivePage }) {
           <button onClick={triggerEditModal} className="secondary-btn icon-text-btn" type="button">
             <Edit size={14} /> Edit Member
           </button>
-          <button onClick={() => setIsDeleteOpen(true)} className="delete-btn danger-action-btn" type="button">
-            <Trash2 size={14} /> Delete Member
-          </button>
+          {isAdmin && (
+            <button onClick={() => setIsDeleteOpen(true)} className="delete-btn danger-action-btn" type="button">
+              <Trash2 size={14} /> Delete Member
+            </button>
+          )}
         </div>
       </header>
 

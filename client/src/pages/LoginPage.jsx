@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { ArrowRight, CheckCircle, Dumbbell, KeyRound, Lock, UserRound, Zap } from 'lucide-react';
+import { ArrowRight, CheckCircle, Dumbbell, Lock, UserRound, Zap } from 'lucide-react';
 import { notify } from '../utils/toast';
 
 export default function LoginPage({ onLogin, requestAuth }) {
-  const [username, setUsername] = useState('admin.gym');
-  const [password, setPassword] = useState('gym1234');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [status, setStatus] = useState('idle');
 
@@ -107,11 +107,6 @@ export default function LoginPage({ onLogin, requestAuth }) {
               </>
             )}
           </button>
-
-          <div className="login-demo">
-            <span><UserRound size={13} /> demo: admin.gym</span>
-            <span><KeyRound size={13} /> gym1234</span>
-          </div>
         </form>
       </section>
     </main>

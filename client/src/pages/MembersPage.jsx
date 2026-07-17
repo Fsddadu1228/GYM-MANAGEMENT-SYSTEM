@@ -10,7 +10,7 @@ export default function MembersPage({
   openAddModalOnLoad,
   setOpenAddModalOnLoad
 }) {
-  const { members, addMember, updateMember, deleteMember } = useContext(GymContext);
+  const { members, addMember, updateMember, deleteMember, isAdmin } = useContext(GymContext);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -722,13 +722,15 @@ export default function MembersPage({
                           >
                             Edit
                           </button>
-                          <button
-                            onClick={() => triggerDeleteModal(member)}
-                            className="action-btn delete-btn"
-                            type="button"
-                          >
-                            Delete
-                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => triggerDeleteModal(member)}
+                              className="action-btn delete-btn"
+                              type="button"
+                            >
+                              Delete
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

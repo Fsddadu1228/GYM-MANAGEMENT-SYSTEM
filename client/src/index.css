@@ -37,6 +37,21 @@ body {
   font-size: 0.9rem;
 }
 
+.role-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 10px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(79, 140, 255, 0.28);
+  background: rgba(79, 140, 255, 0.12);
+  color: #bfdbfe;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .nav-links {
   display: flex;
   flex-direction: column;
@@ -3095,33 +3110,6 @@ textarea:focus-visible {
   border-top-color: #111827;
   border-radius: 50%;
   animation: spin 700ms linear infinite;
-}
-
-.login-demo {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-top: 22px;
-  margin-top: 6px;
-  border-top: 1px solid rgba(148, 163, 184, 0.1);
-}
-
-.login-demo span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  color: #7f8ca3;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(148, 163, 184, 0.1);
-  border-radius: 999px;
-  font-size: 0.79rem;
-  font-weight: 700;
-}
-
-.login-demo svg {
-  color: #fbbf24;
 }
 
 @media (max-width: 480px) {

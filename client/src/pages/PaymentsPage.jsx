@@ -8,7 +8,7 @@ export default function PaymentsPage({
   openRecordModalOnLoad,
   setOpenRecordPaymentOnLoad
 }) {
-  const { members, payments, recordPayment, updatePayment, deletePayment } = useContext(GymContext);
+  const { members, payments, recordPayment, updatePayment, deletePayment, isAdmin } = useContext(GymContext);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -682,22 +682,25 @@ export default function PaymentsPage({
                             className="action-btn view-btn"
                             type="button"
                           >
-                            👁 View
+                            View
                           </button>
                           <button
                             onClick={() => triggerEditModal(p)}
                             className="action-btn edit-btn"
                             type="button"
                           >
-                            ✏ Edit
+                            Edit
                           </button>
-                          <button
-                            onClick={() => triggerDeleteModal(p)}
-                            className="action-btn delete-btn"
-                            type="button"
-                          >
-                            <Trash2 size={14} /> Delete
-                          </button>                        </div>
+                          {isAdmin && (
+                            <button
+                              onClick={() => triggerDeleteModal(p)}
+                              className="action-btn delete-btn"
+                              type="button"
+                            >
+                              <Trash2 size={14} /> Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
