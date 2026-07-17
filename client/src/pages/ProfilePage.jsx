@@ -11,11 +11,12 @@ import {
   Calendar,
   CreditCard,
   Shield,
-  StickyNote,
   Clock,
   BadgeCheck,
   ClipboardList
 } from 'lucide-react';
+import { notify } from '../utils/toast';
+import { formatDisplayDate, formatPHP } from '../utils/formatters';
 
 export default function ProfilePage({ memberId, setActivePage }) {
   const { members, payments, updateMember, deleteMember } = useContext(GymContext);
@@ -32,8 +33,6 @@ export default function ProfilePage({ memberId, setActivePage }) {
   const [address, setAddress] = useState(member?.address || '');
   const [plan, setPlan] = useState(member?.plan || '');
   const [status, setStatus] = useState(member?.status || 'active');
-  const [note, setNote] = useState(member?.note || '');
-  const [specialty, setSpecialty] = useState(member?.specialty || '');
   const [emergencyName, setEmergencyName] = useState(member?.emergencyName || '');
   const [emergencyRelation, setEmergencyRelation] = useState(member?.emergencyRelation || '');
   const [emergencyPhone, setEmergencyPhone] = useState(member?.emergencyPhone || '');
@@ -51,18 +50,12 @@ export default function ProfilePage({ memberId, setActivePage }) {
     );
   }
 
-  const formatLongDate = (isoStr) => {
-    if (!isoStr) return 'Not recorded';
-    const date = new Date(isoStr);
-    if (Number.isNaN(date.getTime())) return isoStr;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+  const formatLongDate = (isoStr) => formatDisplayDate(isoStr, 'Not recorded');
 
   const formatMethod = (method) => {
     if (!method) return 'Not recorded';
-    if (method === 'gcash') return 'GCash';
-    if (method === 'credit-card') return 'Credit Card';
-    return method.charAt(0).toUpperCase() + method.slice(1);
+    if (String(method).toLowerCase() === 'gcash') return 'GCash';
+    return 'Cash';
   };
 
   const formatCycle = (cycle) => {
@@ -125,8 +118,6 @@ export default function ProfilePage({ memberId, setActivePage }) {
     setAddress(member.address || '');
     setPlan(member.plan || '');
     setStatus(member.status || 'active');
-    setNote(member.note || '');
-    setSpecialty(member.specialty || '');
     setEmergencyName(member.emergencyName || '');
     setEmergencyRelation(member.emergencyRelation || '');
     setEmergencyPhone(member.emergencyPhone || '');
@@ -136,7 +127,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
   const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!name || !email || !phone || !plan) {
-      alert('Please fill out all required fields');
+      notify('Please fill out all required fields.', 'error');
       return;
     }
 
@@ -148,29 +139,27 @@ export default function ProfilePage({ memberId, setActivePage }) {
       address,
       plan,
       status,
-      note,
-      specialty,
       emergencyName,
       emergencyRelation,
       emergencyPhone
     });
 
     if (savedMember) {
-      alert('Changes saved successfully.');
+      notify('Changes saved successfully.');
       setIsEditOpen(false);
     } else {
-      alert('Unable to save changes. Please try again.');
+      notify('Unable to save changes. Please try again.', 'error');
     }
   };
 
   const handleDeleteConfirm = async () => {
     const deleted = await deleteMember(member.id);
     if (deleted) {
-      alert('Member deleted successfully.');
+      notify('Member deleted successfully.');
       setIsDeleteOpen(false);
       setActivePage('members');
     } else {
-      alert('Unable to delete member. Please try again.');
+      notify('Unable to delete member. Please try again.', 'error');
     }
   };
 
@@ -209,7 +198,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
           </div>
           <div className="profile-header-info">
             <h2>{member.name}</h2>
-            <p className="profile-specialty">{member.specialty || 'Gym Member'} · {memberIdStr}</p>
+            <p className="profile-member-id">{memberIdStr}</p>
             <div className="profile-status-badge member-profile-badges">
               <span className={`status-badge status-${member.status}`}>{formatStatus(member.status)}</span>
               <span className={`renewal-pill renewal-${renewalTone}`}>
@@ -221,7 +210,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
           <div className="profile-hero-meta">
             <span>Current plan</span>
             <strong>{member.plan}</strong>
-            <small>{member.fee || 'No fee set'}</small>
+            <small>{member.fee ? formatPHP(member.fee) : 'No fee set'}</small>
           </div>
         </div>
 
@@ -240,7 +229,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
           </div>
           <div className="stat-card stat-card-compact">
             <h4>Last Payment</h4>
-            <p className="stat-value">{latestPayment?.amount || member.lastPayment || 'No payment yet'}</p>
+            <p className="stat-value">{latestPayment?.amount ? formatPHP(latestPayment.amount) : member.lastPayment || 'No payment yet'}</p>
           </div>
         </section>
 
@@ -271,14 +260,6 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 </div>
               </div>
             </div>
-
-            <div className="profile-card">
-              <h3><StickyNote size={18} /> Notes</h3>
-              <div className="note-content">
-                <p>{member.note || 'No custom goals or coaching notes logged yet.'}</p>
-              </div>
-            </div>
-
             <div className="profile-card">
               <h3><BadgeCheck size={18} /> Membership Timeline</h3>
               <div className="history-timeline">
@@ -293,7 +274,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 <div className="history-item">
                   <span className="history-date">{latestPayment ? formatLongDate(latestPayment.paidISO) : 'No payment'}</span>
                   <span className="history-event">
-                    {latestPayment ? `Latest payment ${latestPayment.amount} (${formatStatus(latestPayment.status)})` : 'No payment history yet'}
+                    {latestPayment ? `Latest payment ${formatPHP(latestPayment.amount)} (${formatStatus(latestPayment.status)})` : 'No payment history yet'}
                   </span>
                 </div>
               </div>
@@ -318,8 +299,8 @@ export default function ProfilePage({ memberId, setActivePage }) {
                   <strong>{member.plan}</strong>
                 </div>
                 <div className="info-row">
-                  <span>Monthly Fee</span>
-                  <strong>{member.fee || 'Not set'}</strong>
+                  <span>Membership Fee</span>
+                  <strong>{member.fee ? formatPHP(member.fee) : 'Not set'}</strong>
                 </div>
                 <div className="info-row">
                   <span>Payment Status</span>
@@ -361,7 +342,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 </div>
                 <div className="info-row">
                   <span>Payment Method</span>
-                  <strong>{latestPayment ? formatMethod(latestPayment.method) : member.paymentMethod || 'Not recorded'}</strong>
+                  <strong>{latestPayment ? formatMethod(latestPayment.method) : formatMethod(member.paymentMethod)}</strong>
                 </div>
                 <div className="info-row">
                   <span>Paid Date</span>
@@ -427,7 +408,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
                     <tr key={payment.id}>
                       <td>{payment.invoice || 'No invoice'}</td>
                       <td>{payment.plan}</td>
-                      <td>{payment.amount}</td>
+                      <td>{formatPHP(payment.amount)}</td>
                       <td>{formatCycle(payment.billingCycle)}</td>
                       <td>{formatMethod(payment.method)}</td>
                       <td>{payment.paidISO ? formatLongDate(payment.paidISO) : payment.paid || 'Not recorded'}</td>
@@ -481,7 +462,11 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 </label>
                 <label>
                   <span>Plan *</span>
-                  <input type="text" value={plan} onChange={(e) => setPlan(e.target.value)} required />
+                  <select value={plan} onChange={(e) => setPlan(e.target.value)} required>
+                    <option value="Daily">Daily - PHP 50</option>
+                    <option value="Half Month">Half Month - PHP 250</option>
+                    <option value="Full Month">Full Month - PHP 400</option>
+                  </select>
                 </label>
                 <label>
                   <span>Status</span>
@@ -490,10 +475,6 @@ export default function ProfilePage({ memberId, setActivePage }) {
                     <option value="pending">Pending</option>
                     <option value="inactive">Inactive</option>
                   </select>
-                </label>
-                <label>
-                  <span>Specialty</span>
-                  <input type="text" value={specialty} onChange={(e) => setSpecialty(e.target.value)} />
                 </label>
                 <label>
                   <span>Emergency Name</span>
@@ -506,10 +487,6 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 <label>
                   <span>Emergency Phone</span>
                   <input type="text" value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} />
-                </label>
-                <label>
-                  <span>Coach's Note</span>
-                  <textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
                 </label>
               </div>
 
@@ -547,3 +524,4 @@ export default function ProfilePage({ memberId, setActivePage }) {
     </div>
   );
 }
+

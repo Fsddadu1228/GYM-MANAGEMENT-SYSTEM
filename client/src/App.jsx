@@ -182,7 +182,6 @@ function App() {
           {renderActivePage()}
         </main>
       </div>
-      <div className="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
     </GymProvider>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GymContext } from './GymContextObject';
+import { formatPHP, toLocalISODate } from '../utils/formatters';
 
 const API_BASE = '/api';
 
@@ -7,23 +8,21 @@ const DEFAULT_MEMBERS = [
   {
     id: 1,
     name: 'Amara Nkomo',
-    specialty: 'Fitness Coach',
-    email: 'amara@example.com',
+    email: 'amara.nkomo@gymfitness.local',
     phone: '+263 77 123 4567',
     dob: '1990-05-15',
-    address: '123 Fitness St, Harare, Zimbabwe',
-    plan: 'Premium',
+    address: '123 Fitness Street, Harare',
+    plan: 'Full Month',
     status: 'active',
-    joined: '2025-01-10',
-    fee: '₱1,200',
-    note: 'Focused on strength and mobility. Strong form, consistent trainer. Monitor knee on squats.',
-    visitThisMonth: 12,
-    totalVisits: 47,
-    lastVisit: 'Today at 10:30 AM',
-    attendanceRate: '92%',
-    nextPaymentDue: '2026-07-10',
-    paymentMethod: 'Credit Card',
-    lastPayment: '₱1,200 on Jun 10, 2026',
+    joined: '2026-05-20',
+    fee: 'PHP 400',
+    visitThisMonth: 14,
+    totalVisits: 68,
+    lastVisit: '2026-07-15 18:30',
+    attendanceRate: '94%',
+    nextPaymentDue: '2026-07-20',
+    paymentMethod: 'GCash',
+    lastPayment: 'PHP 400 on 2026-06-20',
     paymentStatus: 'Paid',
     emergencyName: 'James Nkomo',
     emergencyRelation: 'Brother',
@@ -33,25 +32,23 @@ const DEFAULT_MEMBERS = [
   {
     id: 2,
     name: 'Tendai Moyo',
-    specialty: 'Weight Loss',
-    email: 'tendai@example.com',
+    email: 'tendai.moyo@gymfitness.local',
     phone: '+263 78 234 5678',
     dob: '1985-03-22',
-    address: '456 Health Ave, Bulawayo, Zimbabwe',
-    plan: 'Basic',
+    address: '456 Health Avenue, Bulawayo',
+    plan: 'Daily',
     status: 'pending',
-    joined: '2025-02-18',
-    fee: '₱800',
-    note: 'Preparing for weight-loss challenge. Motivated and consistent. Track progress weekly.',
-    visitThisMonth: 8,
-    totalVisits: 20,
-    lastVisit: 'Mar 08, 2025 at 6:30 PM',
-    attendanceRate: '80%',
+    joined: '2026-06-03',
+    fee: 'PHP 50',
+    visitThisMonth: 7,
+    totalVisits: 18,
+    lastVisit: '2026-07-14 07:00',
+    attendanceRate: '78%',
     nextPaymentDue: '2026-07-18',
     paymentMethod: 'Cash',
-    lastPayment: '₱800 on Jun 18, 2026',
+    lastPayment: 'PHP 50 on 2026-06-18',
     paymentStatus: 'Pending',
-    emergencyName: 'Tendai Moyo Sr.',
+    emergencyName: 'Farai Moyo',
     emergencyRelation: 'Father',
     emergencyPhone: '+263 78 234 5679',
     avatar: 'TM'
@@ -59,24 +56,22 @@ const DEFAULT_MEMBERS = [
   {
     id: 3,
     name: 'Liam Chidyausiku',
-    specialty: 'Crossfit',
-    email: 'liam@example.com',
+    email: 'liam.chidyausiku@gymfitness.local',
     phone: '+263 71 345 6789',
     dob: '1992-07-08',
-    address: '789 Power Lane, Mutare, Zimbabwe',
-    plan: 'Standard',
+    address: '789 Power Lane, Mutare',
+    plan: 'Half Month',
     status: 'inactive',
-    joined: '2025-03-05',
-    fee: '₱1,000',
-    note: 'On break for the next month. Will return mid-April. Strong crossfit athlete.',
-    visitThisMonth: 2,
-    totalVisits: 5,
-    lastVisit: 'Mar 06, 2025 at 5:45 AM',
-    attendanceRate: '45%',
+    joined: '2026-04-28',
+    fee: 'PHP 250',
+    visitThisMonth: 3,
+    totalVisits: 36,
+    lastVisit: '2026-07-04 05:45',
+    attendanceRate: '52%',
     nextPaymentDue: '2026-07-05',
-    paymentMethod: 'Credit Card',
-    lastPayment: '₱1,000 on Jun 05, 2026',
-    paymentStatus: 'Paid',
+    paymentMethod: 'Cash',
+    lastPayment: 'PHP 250 on 2026-06-05',
+    paymentStatus: 'Overdue',
     emergencyName: 'Sarah Chidyausiku',
     emergencyRelation: 'Sister',
     emergencyPhone: '+263 71 345 6790',
@@ -85,91 +80,184 @@ const DEFAULT_MEMBERS = [
   {
     id: 4,
     name: 'Nadia Bvuma',
-    specialty: 'Yoga',
-    email: 'nadia@example.com',
+    email: 'nadia.bvuma@gymfitness.local',
     phone: '+263 79 456 7890',
     dob: '1988-09-12',
-    address: '321 Zen Lane, Harare, Zimbabwe',
-    plan: 'Premium',
+    address: '321 Zen Lane, Harare',
+    plan: 'Full Month',
     status: 'active',
-    joined: '2025-04-12',
-    fee: '₱1,200',
-    note: 'Yoga and recovery plan. Excellent form, very flexible. Recovering from old injury.',
-    visitThisMonth: 10,
-    totalVisits: 30,
-    lastVisit: 'Mar 09, 2025 at 7:00 AM',
-    attendanceRate: '88%',
-    nextPaymentDue: '2026-07-12',
-    paymentMethod: 'Mobile Money',
-    lastPayment: '₱1,200 on Jun 12, 2026',
+    joined: '2026-07-02',
+    fee: 'PHP 400',
+    visitThisMonth: 11,
+    totalVisits: 42,
+    lastVisit: '2026-07-15 08:00',
+    attendanceRate: '91%',
+    nextPaymentDue: '2026-08-15',
+    paymentMethod: 'GCash',
+    lastPayment: 'PHP 400 on 2026-07-15',
     paymentStatus: 'Paid',
     emergencyName: 'David Bvuma',
     emergencyRelation: 'Spouse',
     emergencyPhone: '+263 79 456 7891',
     avatar: 'NB'
+  },
+  {
+    id: 5,
+    name: 'Rudo Maseko',
+    email: 'rudo.maseko@gymfitness.local',
+    phone: '+263 73 567 8901',
+    dob: '1995-11-02',
+    address: '12 Wellness Road, Harare',
+    plan: 'Half Month',
+    status: 'active',
+    joined: '2026-06-24',
+    fee: 'PHP 250',
+    visitThisMonth: 9,
+    totalVisits: 24,
+    lastVisit: '2026-07-16 06:15',
+    attendanceRate: '86%',
+    nextPaymentDue: '2026-07-16',
+    paymentMethod: 'GCash',
+    lastPayment: 'PHP 250 on 2026-07-01',
+    paymentStatus: 'Paid',
+    emergencyName: 'Nyasha Maseko',
+    emergencyRelation: 'Sister',
+    emergencyPhone: '+263 73 567 8902',
+    avatar: 'RM'
+  },
+  {
+    id: 6,
+    name: 'Kuda Nyathi',
+    email: 'kuda.nyathi@gymfitness.local',
+    phone: '+263 72 678 9012',
+    dob: '1998-02-18',
+    address: '88 Active Close, Bulawayo',
+    plan: 'Daily',
+    status: 'active',
+    joined: '2026-07-10',
+    fee: 'PHP 50',
+    visitThisMonth: 4,
+    totalVisits: 4,
+    lastVisit: '2026-07-16 07:20',
+    attendanceRate: '100%',
+    nextPaymentDue: '2026-07-18',
+    paymentMethod: 'Cash',
+    lastPayment: 'PHP 50 on 2026-07-17',
+    paymentStatus: 'Paid',
+    emergencyName: 'Tariro Nyathi',
+    emergencyRelation: 'Mother',
+    emergencyPhone: '+263 72 678 9013',
+    avatar: 'KN'
   }
 ];
-
 const DEFAULT_PAYMENTS = [
   {
     id: 1,
     memberId: 1,
     member: 'Amara Nkomo',
-    plan: 'Premium',
-    amount: '₱1,200',
-    method: 'credit-card',
-    due: 'Jul 10',
-    paid: 'Jul 10',
-    paidISO: '2026-07-10',
+    plan: 'Full Month',
+    amount: 'PHP 400',
+    method: 'gcash',
+    due: '2026-07-20',
+    paid: '2026-06-20',
+    paidISO: '2026-06-20',
+    billingCycle: 'full month',
+    coverageStart: '2026-06-20',
+    coverageEnd: '2026-07-20',
     status: 'paid',
     invoice: '#182394',
-    ref: 'TXN-948190',
-    notes: 'Monthly fee payment'
+    ref: 'GC-948190',
+    notes: 'Full-month membership renewal'
   },
   {
     id: 2,
     memberId: 2,
     member: 'Tendai Moyo',
-    plan: 'Basic',
-    amount: '₱800',
+    plan: 'Daily',
+    amount: 'PHP 50',
     method: 'cash',
-    due: 'Jul 12',
-    paid: '—',
+    due: '2026-07-18',
+    paid: '',
     paidISO: '',
+    billingCycle: 'daily',
+    coverageStart: '2026-07-17',
+    coverageEnd: '2026-07-18',
     status: 'pending',
     invoice: '#492813',
     ref: '',
-    notes: ''
+    notes: 'Awaiting counter payment'
   },
   {
     id: 3,
     memberId: 3,
     member: 'Liam Chidyausiku',
-    plan: 'Standard',
-    amount: '₱1,000',
-    method: 'bank',
-    due: 'Jul 08',
-    paid: '—',
+    plan: 'Half Month',
+    amount: 'PHP 250',
+    method: 'cash',
+    due: '2026-07-05',
+    paid: '',
     paidISO: '',
+    billingCycle: 'half month',
+    coverageStart: '2026-06-20',
+    coverageEnd: '2026-07-05',
     status: 'overdue',
     invoice: '#238914',
     ref: '',
-    notes: 'Awaiting bank transfer confirmation'
+    notes: 'Cash payment not yet confirmed'
   },
   {
     id: 4,
     memberId: 4,
     member: 'Nadia Bvuma',
-    plan: 'Premium',
-    amount: '₱1,200',
+    plan: 'Full Month',
+    amount: 'PHP 400',
     method: 'gcash',
-    due: 'Jul 15',
-    paid: 'Jul 15',
+    due: '2026-08-15',
+    paid: '2026-07-15',
     paidISO: '2026-07-15',
+    billingCycle: 'full month',
+    coverageStart: '2026-07-15',
+    coverageEnd: '2026-08-15',
     status: 'paid',
     invoice: '#774218',
     ref: 'GC-2983190',
     notes: 'Paid via GCash'
+  },
+  {
+    id: 5,
+    memberId: 5,
+    member: 'Rudo Maseko',
+    plan: 'Half Month',
+    amount: 'PHP 250',
+    method: 'gcash',
+    due: '2026-07-16',
+    paid: '2026-07-01',
+    paidISO: '2026-07-01',
+    billingCycle: 'half month',
+    coverageStart: '2026-07-01',
+    coverageEnd: '2026-07-16',
+    status: 'paid',
+    invoice: '#681245',
+    ref: 'GC-554210',
+    notes: 'Half-month membership renewal'
+  },
+  {
+    id: 6,
+    memberId: 6,
+    member: 'Kuda Nyathi',
+    plan: 'Daily',
+    amount: 'PHP 50',
+    method: 'cash',
+    due: '2026-07-18',
+    paid: '2026-07-17',
+    paidISO: '2026-07-17',
+    billingCycle: 'daily',
+    coverageStart: '2026-07-17',
+    coverageEnd: '2026-07-18',
+    status: 'paid',
+    invoice: '#915730',
+    ref: 'CASH-0710',
+    notes: 'Daily access payment'
   }
 ];
 
@@ -184,8 +272,11 @@ function getInitials(name) {
 
 function toISODate(dateValue) {
   const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
-  return date.toISOString().slice(0, 10);
+  if (Number.isNaN(date.getTime())) return toLocalISODate();
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function addMonths(dateValue, monthCount) {
@@ -209,6 +300,12 @@ function getPlanBillingCycle(plan = '') {
   if (/\b(day|daily)\b/.test(normalizedPlan)) {
     return { label: 'daily', days: 1 };
   }
+  if (/\b(half|half\s*month|15\s*day)\b/.test(normalizedPlan)) {
+    return { label: 'half month', days: 15 };
+  }
+  if (/\b(full|full\s*month|month|monthly)\b/.test(normalizedPlan)) {
+    return { label: 'full month', months: 1 };
+  }
   if (/\b(week|weekly)\b/.test(normalizedPlan)) {
     return { label: 'weekly', days: 7 };
   }
@@ -225,6 +322,13 @@ function getPlanBillingCycle(plan = '') {
   return { label: 'monthly', months: 1 };
 }
 
+function getPlanFee(plan = '') {
+  const normalizedPlan = plan.toLowerCase();
+  if (/\b(day|daily)\b/.test(normalizedPlan)) return 'PHP 50';
+  if (/\b(half|half\s*month|15\s*day)\b/.test(normalizedPlan)) return 'PHP 250';
+  return 'PHP 400';
+}
+
 function getNextPaymentDue(fromDate = new Date(), plan = '') {
   const billingCycle = getPlanBillingCycle(plan);
   const nextDueDate = billingCycle.days
@@ -234,19 +338,18 @@ function getNextPaymentDue(fromDate = new Date(), plan = '') {
 }
 
 function formatShortDate(dateValue) {
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return toISODate(dateValue);
 }
 
 function buildRenewalDetails(payment, member) {
   const paidISO = payment.paidISO || toISODate(new Date());
-  const plan = payment.plan || member?.plan || 'Basic';
+  const plan = payment.plan || member?.plan || 'Full Month';
   const billingCycle = getPlanBillingCycle(plan);
   const coverageEnd = getNextPaymentDue(paidISO, plan);
 
   return {
     ...payment,
+    amount: formatPHP(payment.amount),
     memberId: member?.id ?? payment.memberId ?? null,
     member: member?.name || payment.member || '',
     plan,
@@ -350,20 +453,20 @@ export const GymProvider = ({ children, authToken }) => {
   // CRUD Operations
   const addMember = async (memberData) => {
     const nextId = members.length > 0 ? Math.max(...members.map(m => m.id)) + 1 : 1;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = toLocalISODate();
     const newMember = {
       id: nextId,
       ...memberData,
       joined: todayStr,
       avatar: getInitials(memberData.name),
-      fee: memberData.plan.toLowerCase() === 'premium' ? '₱1,200' : memberData.plan.toLowerCase() === 'standard' ? '₱1,000' : '₱800',
+      fee: getPlanFee(memberData.plan),
       visitThisMonth: 0,
       totalVisits: 0,
-      lastVisit: '—',
+      lastVisit: '-',
       attendanceRate: '0%',
       nextPaymentDue: getNextPaymentDue(todayStr, memberData.plan),
       paymentMethod: 'Cash',
-      lastPayment: '—',
+      lastPayment: '-',
       paymentStatus: memberData.status === 'active' ? 'Paid' : 'Pending'
     };
     if (useApiRef.current) {
@@ -386,11 +489,17 @@ export const GymProvider = ({ children, authToken }) => {
   };
 
   const updateMember = async (id, updatedFields) => {
+    const existingMember = members.find((m) => m.id === id);
+    const shouldRenamePayments = Boolean(
+      updatedFields.name &&
+      existingMember &&
+      updatedFields.name !== existingMember.name
+    );
     const newList = members.map((m) => {
       if (m.id === id) {
         const merged = { ...m, ...updatedFields };
         merged.avatar = getInitials(merged.name);
-        merged.fee = merged.plan.toLowerCase() === 'premium' ? '₱1,200' : merged.plan.toLowerCase() === 'standard' ? '₱1,000' : '₱800';
+        merged.fee = getPlanFee(merged.plan);
         return merged;
       }
       return m;
@@ -404,10 +513,12 @@ export const GymProvider = ({ children, authToken }) => {
           body: JSON.stringify(updatedMember)
         });
         updateMembersList(newList.map((m) => (m.id === id ? savedMember : m)));
-        const renamedPayments = payments.map((payment) => (
-          payment.memberId === id ? { ...payment, member: savedMember.name } : payment
-        ));
-        updatePaymentsList(renamedPayments);
+        if (shouldRenamePayments) {
+          const renamedPayments = payments.map((payment) => (
+            payment.memberId === id ? { ...payment, member: savedMember.name } : payment
+          ));
+          updatePaymentsList(renamedPayments);
+        }
         return savedMember;
       } catch (err) {
         console.error('Failed to update member:', err);
@@ -416,7 +527,7 @@ export const GymProvider = ({ children, authToken }) => {
     }
 
     updateMembersList(newList);
-    if (updatedMember) {
+    if (updatedMember && shouldRenamePayments) {
       const renamedPayments = payments.map((payment) => (
         payment.memberId === id ? { ...payment, member: updatedMember.name } : payment
       ));
@@ -449,7 +560,7 @@ export const GymProvider = ({ children, authToken }) => {
     const nextPaymentDue = payment.coverageEnd || getNextPaymentDue(paidDate, payment.plan || memberToUpdate.plan);
     await updateMember(memberToUpdate.id, {
       paymentMethod: payment.method,
-      lastPayment: `${payment.amount} on ${payment.paid}`,
+      lastPayment: `${formatPHP(payment.amount)} on ${payment.paid}`,
       paymentStatus: 'Paid',
       nextPaymentDue
     });
@@ -517,6 +628,20 @@ export const GymProvider = ({ children, authToken }) => {
     return updatedPayment || null;
   };
 
+  const deletePayment = async (id) => {
+    if (useApiRef.current) {
+      try {
+        await requestJson(`/payments/${id}`, authToken, { method: 'DELETE' });
+      } catch (err) {
+        console.error('Failed to delete payment:', err);
+        return false;
+      }
+    }
+
+    updatePaymentsList(payments.filter((payment) => payment.id !== id));
+    return true;
+  };
+
   return (
     <GymContext.Provider value={{
       members,
@@ -526,9 +651,14 @@ export const GymProvider = ({ children, authToken }) => {
       updateMember,
       deleteMember,
       recordPayment,
-      updatePayment
+      updatePayment,
+      deletePayment
     }}>
       {!loading && children}
     </GymContext.Provider>
   );
 };
+
+
+
+

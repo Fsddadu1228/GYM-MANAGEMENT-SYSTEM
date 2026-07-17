@@ -1,12 +1,14 @@
 import React, { useCallback, useContext, useState, useEffect } from 'react';
 import { GymContext } from '../context/GymContextObject';
-import { Download, Printer, ReceiptText, Search, X } from 'lucide-react';
+import { Download, Printer, ReceiptText, Search, Trash2, X } from 'lucide-react';
+import { notify } from '../utils/toast';
+import { formatDisplayDate, formatPHP, parseCurrencyAmount, toLocalISODate } from '../utils/formatters';
 
 export default function PaymentsPage({
   openRecordModalOnLoad,
   setOpenRecordPaymentOnLoad
 }) {
-  const { members, payments, recordPayment, updatePayment } = useContext(GymContext);
+  const { members, payments, recordPayment, updatePayment, deletePayment } = useContext(GymContext);
 
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -24,24 +26,26 @@ export default function PaymentsPage({
 
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [viewingPayment, setViewingPayment] = useState(null);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState(null);
 
   // Form Fields State
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('gcash');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(toLocalISODate());
   const [ref, setRef] = useState('');
   const [notes, setNotes] = useState('');
 
   // KPI Calculations
   const totalRevenue = payments
     .filter((p) => p.status === 'paid')
-    .reduce((sum, p) => sum + Number((p.amount || '').replace(/[₱,]/g, '')), 0);
+    .reduce((sum, p) => sum + parseCurrencyAmount(p.amount), 0);
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = toLocalISODate();
   const paidToday = payments
     .filter((p) => p.status === 'paid' && p.paidISO === todayISO)
-    .reduce((sum, p) => sum + Number((p.amount || '').replace(/[₱,]/g, '')), 0);
+    .reduce((sum, p) => sum + parseCurrencyAmount(p.amount), 0);
 
   const pendingCount = payments.filter((p) => p.status === 'pending').length;
   const overdueCount = payments.filter((p) => p.status === 'overdue').length;
@@ -52,13 +56,17 @@ export default function PaymentsPage({
     return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
   };
 
+  const normalizePaymentMethod = (paymentMethod) => (
+    String(paymentMethod || '').toLowerCase() === 'gcash' ? 'gcash' : 'cash'
+  );
+
   // Search & Filtering
   const filtered = payments.filter((p) => {
     const linkedMember = members.find((member) => member.id === p.memberId);
     const displayName = linkedMember?.name || p.member || '';
     const matchesSearch = !searchTerm || displayName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = selectedStatus === 'all' || p.status === selectedStatus;
-    const matchesMethod = selectedMethod === 'all' || p.method === selectedMethod;
+    const matchesMethod = selectedMethod === 'all' || normalizePaymentMethod(p.method) === selectedMethod;
     const matchesPlan = selectedPlan === 'all' || p.plan === selectedPlan;
     return matchesSearch && matchesStatus && matchesMethod && matchesPlan;
   }).sort((a, b) => {
@@ -66,9 +74,9 @@ export default function PaymentsPage({
       case 'paid-oldest':
         return compareValues(new Date(a.paidISO || a.createdAt || 0).getTime(), new Date(b.paidISO || b.createdAt || 0).getTime());
       case 'amount-high':
-        return compareValues(Number((b.amount || '').replace(/[^0-9.]/g, '')), Number((a.amount || '').replace(/[^0-9.]/g, '')));
+        return compareValues(parseCurrencyAmount(b.amount), parseCurrencyAmount(a.amount));
       case 'amount-low':
-        return compareValues(Number((a.amount || '').replace(/[^0-9.]/g, '')), Number((b.amount || '').replace(/[^0-9.]/g, '')));
+        return compareValues(parseCurrencyAmount(a.amount), parseCurrencyAmount(b.amount));
       case 'member-asc':
         return compareValues(a.member, b.member);
       case 'renewal-soon':
@@ -98,7 +106,7 @@ export default function PaymentsPage({
     }
     setAmount('');
     setMethod('gcash');
-    setDate(new Date().toISOString().slice(0, 10));
+    setDate(toLocalISODate());
     setRef('');
     setNotes('');
     setIsRecordOpen(true);
@@ -124,9 +132,9 @@ export default function PaymentsPage({
     setEditingPayment(payment);
     const linkedMember = members.find((m) => m.id === payment.memberId) || members.find((m) => m.name === payment.member);
     setSelectedMemberId(linkedMember ? String(linkedMember.id) : '');
-    setAmount(payment.amount.replace(/[₱,]/g, '').trim());
-    setMethod(payment.method);
-    setDate(payment.paidISO || new Date().toISOString().slice(0, 10));
+    setAmount(String(payment.amount || '').replace(/[^0-9.]/g, '').trim());
+    setMethod(normalizePaymentMethod(payment.method));
+    setDate(payment.paidISO || toLocalISODate());
     setRef(payment.ref || '');
     setNotes(payment.notes || '');
     setIsRecordOpen(true);
@@ -137,9 +145,29 @@ export default function PaymentsPage({
     setIsDetailsOpen(true);
   };
 
+  const triggerDeleteModal = (payment) => {
+    setPaymentToDelete(payment);
+    setIsDeleteOpen(true);
+  };
+
   const closeDetailsModal = () => {
     setIsDetailsOpen(false);
     setViewingPayment(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!paymentToDelete) return;
+    const deleted = await deletePayment(paymentToDelete.id);
+    if (deleted) {
+      notify('Payment deleted successfully.');
+      setIsDeleteOpen(false);
+      setPaymentToDelete(null);
+      if (viewingPayment?.id === paymentToDelete.id) {
+        closeDetailsModal();
+      }
+    } else {
+      notify('Unable to delete payment. Please try again.', 'error');
+    }
   };
 
   const formatCycle = (cycle) => {
@@ -149,9 +177,8 @@ export default function PaymentsPage({
 
   const formatMethod = (paymentMethod) => {
     if (!paymentMethod) return 'Not recorded';
-    if (paymentMethod === 'gcash') return 'GCash';
-    if (paymentMethod === 'credit-card') return 'Credit Card';
-    return paymentMethod.charAt(0).toUpperCase() + paymentMethod.slice(1);
+    if (normalizePaymentMethod(paymentMethod) === 'gcash') return 'GCash';
+    return 'Cash';
   };
 
   const getPaymentMember = (payment) => {
@@ -200,11 +227,11 @@ export default function PaymentsPage({
       payment.memberId ? `MEM-${String(payment.memberId).padStart(3, '0')}` : '',
       getPaymentMemberName(payment),
       payment.plan,
-      payment.amount,
+      formatPHP(payment.amount),
       formatMethod(payment.method),
       payment.status,
-      payment.paidISO || payment.paid,
-      payment.coverageEnd || payment.due,
+      formatDisplayDate(payment.paidISO, payment.paid || ''),
+      formatDisplayDate(payment.coverageEnd, payment.due || ''),
       payment.ref,
       payment.notes
     ]);
@@ -219,17 +246,17 @@ export default function PaymentsPage({
         <td>${payment.memberId ? `MEM-${String(payment.memberId).padStart(3, '0')}` : ''}</td>
         <td>${escapeHtml(getPaymentMemberName(payment))}</td>
         <td>${escapeHtml(payment.plan)}</td>
-        <td>${escapeHtml(payment.amount)}</td>
+        <td>${escapeHtml(formatPHP(payment.amount))}</td>
         <td>${escapeHtml(formatMethod(payment.method))}</td>
         <td>${escapeHtml(payment.status)}</td>
-        <td>${escapeHtml(payment.paidISO || payment.paid || '')}</td>
-        <td>${escapeHtml(payment.coverageEnd || payment.due || '')}</td>
+        <td>${escapeHtml(formatDisplayDate(payment.paidISO, payment.paid || ''))}</td>
+        <td>${escapeHtml(formatDisplayDate(payment.coverageEnd, payment.due || ''))}</td>
       </tr>
     `).join('');
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Popup blocker detected. Please allow popups to print the report.');
+      notify('Popup blocker detected. Please allow popups to print the report.', 'error');
       return;
     }
 
@@ -253,10 +280,10 @@ export default function PaymentsPage({
       </head>
       <body>
         <h1>FitnessGym Payments Report</h1>
-        <p>Generated ${new Date().toLocaleString()} · ${filtered.length} filtered payments</p>
+        <p>Generated ${formatDisplayDate(new Date())} - ${filtered.length} filtered payments</p>
         <section class="summary">
-          <div><strong>₱${totalRevenue.toLocaleString('en-PH')}</strong>Total revenue</div>
-          <div><strong>₱${paidToday.toLocaleString('en-PH')}</strong>Paid today</div>
+          <div><strong>${formatPHP(totalRevenue)}</strong>Total revenue</div>
+          <div><strong>${formatPHP(paidToday)}</strong>Paid today</div>
           <div><strong>${pendingCount}</strong>Pending</div>
           <div><strong>${overdueCount}</strong>Overdue</div>
         </section>
@@ -285,12 +312,8 @@ export default function PaymentsPage({
   };
 
   const getReceiptHtml = (payment, shouldAutoPrint = false) => {
-    const paidDate = payment.paidISO
-      ? new Date(payment.paidISO).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-      : payment.paid || 'Not recorded';
-    const renewalDate = payment.coverageEnd
-      ? new Date(payment.coverageEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-      : payment.due || 'Not recorded';
+    const paidDate = formatDisplayDate(payment.paidISO, payment.paid || 'Not recorded');
+    const renewalDate = formatDisplayDate(payment.coverageEnd, payment.due || 'Not recorded');
 
     return `
       <!doctype html>
@@ -337,7 +360,7 @@ export default function PaymentsPage({
           </section>
           <section class="amount">
             <span>Amount Paid</span>
-            <strong>${escapeHtml(payment.amount)}</strong>
+            <strong>${escapeHtml(formatPHP(payment.amount))}</strong>
           </section>
           <section>
             <div class="row"><span>Member Name</span><span>${escapeHtml(getPaymentMemberName(payment))}</span></div>
@@ -362,20 +385,20 @@ export default function PaymentsPage({
 
     const amtNum = Number(amount);
     if (Number.isNaN(amtNum) || amtNum <= 0) {
-      alert('Please enter a valid amount');
+      notify('Please enter a valid amount.', 'error');
       return;
     }
 
     const selectedMember = members.find((m) => m.id === Number(selectedMemberId));
     if (!selectedMember) {
-      alert('Please choose a valid member');
+      notify('Please choose a valid member.', 'error');
       return;
     }
-    const plan = selectedMember ? selectedMember.plan : 'Basic';
-    const amountStr = `₱${amtNum.toLocaleString('en-PH')}`;
+    const plan = selectedMember ? selectedMember.plan : 'Full Month';
+    const amountStr = formatPHP(amtNum);
 
     // Format paid date for short representation
-    const formattedPaidDate = new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const formattedPaidDate = formatDisplayDate(date);
 
     const payload = {
       memberId: selectedMember.id,
@@ -393,18 +416,18 @@ export default function PaymentsPage({
     if (recordMode === 'edit' && editingPayment) {
       const savedPayment = await updatePayment(editingPayment.id, payload);
       if (savedPayment) {
-        alert('Payment updated successfully.');
+        notify('Payment updated successfully.');
       } else {
-        alert('Unable to update payment. Please try again.');
+        notify('Unable to update payment. Please try again.', 'error');
       }
     } else {
       const createdPayment = await recordPayment(payload);
       if (createdPayment) {
-        alert('Payment recorded successfully.');
+        notify('Payment recorded successfully.');
         setViewingPayment(createdPayment);
         setIsDetailsOpen(true);
       } else {
-        alert('Unable to record payment. Please try again.');
+        notify('Unable to record payment. Please try again.', 'error');
       }
     }
 
@@ -416,7 +439,7 @@ export default function PaymentsPage({
     if (!p) return;
     const w = window.open('', '_blank');
     if (!w) {
-      alert('Popup blocker detected. Please allow popups to print receipt.');
+      notify('Popup blocker detected. Please allow popups to print receipt.', 'error');
       return;
     }
     w.document.open();
@@ -498,11 +521,11 @@ export default function PaymentsPage({
       <section className="stats-grid">
         <article className="stat-card">
           <h3>Total Revenue</h3>
-          <p className="stat-value">₱{totalRevenue.toLocaleString('en-PH')}</p>
+          <p className="stat-value">{formatPHP(totalRevenue)}</p>
         </article>
         <article className="stat-card">
           <h3>Paid Today</h3>
-          <p className="stat-value active-count">₱{paidToday.toLocaleString('en-PH')}</p>
+          <p className="stat-value active-count">{formatPHP(paidToday)}</p>
         </article>
         <article className="stat-card">
           <h3>Pending Payments</h3>
@@ -567,8 +590,6 @@ export default function PaymentsPage({
                 <option value="all">All</option>
                 <option value="cash">Cash</option>
                 <option value="gcash">GCash</option>
-                <option value="bank">Bank</option>
-                <option value="credit-card">Credit Card</option>
               </select>
             </div>
 
@@ -636,7 +657,6 @@ export default function PaymentsPage({
                 </tr>
               ) : (
                 paginated.map((p) => {
-                  const methodDisplay = p.method === 'gcash' ? 'GCash' : p.method === 'credit-card' ? 'Credit Card' : p.method.charAt(0).toUpperCase() + p.method.slice(1);
                   const memberDisplay = getPaymentMemberName(p);
                   const statusClass = p.status === 'paid' ? 'status-active' : p.status === 'pending' ? 'status-pending' : 'status-inactive';
                   const statusText = p.status === 'paid' ? 'Paid' : p.status === 'pending' ? 'Pending' : 'Overdue';
@@ -648,10 +668,10 @@ export default function PaymentsPage({
                         <small className="table-subtext">MEM-{String(p.memberId || '').padStart(3, '0')}</small>
                       </td>
                       <td>{p.plan}</td>
-                      <td>{p.amount}</td>
-                      <td>{methodDisplay}</td>
-                      <td>{p.coverageEnd || p.due}</td>
-                      <td>{p.paid || '—'}</td>
+                      <td>{formatPHP(p.amount)}</td>
+                      <td>{formatMethod(p.method)}</td>
+                      <td>{formatDisplayDate(p.coverageEnd, p.due || 'Not recorded')}</td>
+                      <td>{formatDisplayDate(p.paidISO, p.paid || 'Not recorded')}</td>
                       <td>
                         <span className={`status-badge ${statusClass}`}>{statusText}</span>
                       </td>
@@ -671,7 +691,13 @@ export default function PaymentsPage({
                           >
                             ✏ Edit
                           </button>
-                        </div>
+                          <button
+                            onClick={() => triggerDeleteModal(p)}
+                            className="action-btn delete-btn"
+                            type="button"
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>                        </div>
                       </td>
                     </tr>
                   );
@@ -685,7 +711,7 @@ export default function PaymentsPage({
           <div className="pagination-footer">
             <div className="pagination-info">
               <span>
-                Showing {startIdx + 1}–{endIdx} of {totalMatches} payments
+                Showing {startIdx + 1}-{endIdx} of {totalMatches} payments
               </span>
             </div>
             <div className="pagination">{renderPaginationButtons()}</div>
@@ -735,8 +761,6 @@ export default function PaymentsPage({
                 <select value={method} onChange={(e) => setMethod(e.target.value)} required>
                   <option value="cash">Cash</option>
                   <option value="gcash">GCash</option>
-                  <option value="bank">Bank</option>
-                  <option value="credit-card">Credit Card</option>
                 </select>
               </label>
 
@@ -813,29 +837,25 @@ export default function PaymentsPage({
                 </div>
                 <div className="invoice-row">
                   <strong>Amount</strong>
-                  <span>{viewingPayment.amount}</span>
+                  <span>{formatPHP(viewingPayment.amount)}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Coverage Start</strong>
-                  <span>{viewingPayment.coverageStart || viewingPayment.paidISO || 'â€”'}</span>
+                  <span>{formatDisplayDate(viewingPayment.coverageStart || viewingPayment.paidISO, 'Not recorded')}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Renewal Date</strong>
-                  <span>{viewingPayment.coverageEnd || viewingPayment.due || 'â€”'}</span>
+                  <span>{formatDisplayDate(viewingPayment.coverageEnd, viewingPayment.due || 'Not recorded')}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Method</strong>
                   <span>
-                    {viewingPayment.method === 'gcash'
-                      ? 'GCash'
-                      : viewingPayment.method === 'credit-card'
-                      ? 'Credit Card'
-                      : viewingPayment.method.charAt(0).toUpperCase() + viewingPayment.method.slice(1)}
+                    {formatMethod(viewingPayment.method)}
                   </span>
                 </div>
                 <div className="invoice-row">
                   <strong>Reference</strong>
-                  <span>{viewingPayment.ref || '—'}</span>
+                  <span>{viewingPayment.ref || '-'}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Status</strong>
@@ -843,11 +863,11 @@ export default function PaymentsPage({
                 </div>
                 <div className="invoice-row">
                   <strong>Paid Date</strong>
-                  <span>{viewingPayment.paid || '—'}</span>
+                  <span>{formatDisplayDate(viewingPayment.paidISO, viewingPayment.paid || 'Not recorded')}</span>
                 </div>
                 <div className="invoice-row">
                   <strong>Notes</strong>
-                  <span>{viewingPayment.notes || '—'}</span>
+                  <span>{viewingPayment.notes || '-'}</span>
                 </div>
               </div>
             </div>
@@ -863,6 +883,26 @@ export default function PaymentsPage({
                 <Printer size={16} /> Print Receipt
               </button>
             </footer>
+          </div>
+        </div>
+      )}
+
+      {isDeleteOpen && paymentToDelete && (
+        <div className="modal" aria-hidden="false">
+          <div className="modal-card confirm-card">
+            <h3>Delete payment?</h3>
+            <p>
+              This action cannot be undone. Invoice <strong>{paymentToDelete.invoice || `#${paymentToDelete.id}`}</strong> for{' '}
+              <strong>{getPaymentMemberName(paymentToDelete)}</strong> will be removed from payment records.
+            </p>
+            <div className="modal-actions" style={{ justifyContent: 'center' }}>
+              <button type="button" onClick={() => setIsDeleteOpen(false)} className="secondary-btn">
+                Cancel
+              </button>
+              <button onClick={handleDeleteConfirm} type="button" className="delete-btn danger-action-btn">
+                Delete payment
+              </button>
+            </div>
           </div>
         </div>
       )}

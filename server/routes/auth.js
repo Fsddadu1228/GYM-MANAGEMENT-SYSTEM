@@ -18,7 +18,16 @@ function publicUser(user) {
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const user = await User.findOne({ username: String(username || '').toLowerCase().trim() });
+    const login = String(username || '').toLowerCase().trim();
+    if (!login) {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+    const user = await User.findOne({
+      $or: [
+        { username: login },
+        { email: login }
+      ]
+    });
 
     if (!user || !user.active || !verifyPassword(password || '', user.passwordHash)) {
       return res.status(401).json({ error: 'Invalid username or password.' });

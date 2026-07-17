@@ -1,6 +1,8 @@
 import React, { useCallback, useContext, useState, useEffect } from 'react';
 import { GymContext } from '../context/GymContextObject';
 import { Download, Printer, Search, X } from 'lucide-react';
+import { notify } from '../utils/toast';
+import { formatDisplayDate, toLocalISODate } from '../utils/formatters';
 
 export default function MembersPage({
   setActivePage,
@@ -36,8 +38,6 @@ export default function MembersPage({
   const [phone, setPhone] = useState('');
   const [plan, setPlan] = useState('');
   const [status, setStatus] = useState('active');
-  const [note, setNote] = useState('');
-  const [specialty, setSpecialty] = useState('');
   const [emergencyName, setEmergencyName] = useState('');
   const [emergencyRelation, setEmergencyRelation] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
@@ -50,15 +50,20 @@ export default function MembersPage({
   const activeCount = members.filter((m) => m.status === 'active').length;
   const pendingCount = members.filter((m) => m.status === 'pending').length;
   const inactiveCount = members.filter((m) => m.status === 'inactive').length;
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = toLocalISODate();
   const planOptions = [...new Set(members.map((m) => m.plan).filter(Boolean))].sort();
-  const paymentMethodOptions = [...new Set(members.map((m) => m.paymentMethod).filter(Boolean))].sort();
+  const paymentMethodOptions = ['Cash', 'GCash'];
+
+  const formatPaymentMethod = (method) => {
+    if (!method) return 'No method';
+    return String(method).toLowerCase() === 'gcash' ? 'GCash' : 'Cash';
+  };
 
   const isExpired = (member) => {
     if (!member.nextPaymentDue) return false;
     const renewalDate = new Date(member.nextPaymentDue);
     if (Number.isNaN(renewalDate.getTime())) return false;
-    return renewalDate.toISOString().slice(0, 10) < todayISO;
+    return toLocalISODate(renewalDate) < todayISO;
   };
 
   const isDueSoon = (member) => {
@@ -88,7 +93,7 @@ export default function MembersPage({
       selectedPaymentStatus === 'all' ||
       (selectedPaymentStatus === 'pending' && (m.paymentStatus || '').toLowerCase() !== 'paid') ||
       (m.paymentStatus || '').toLowerCase() === selectedPaymentStatus;
-    const matchesPaymentMethod = selectedPaymentMethod === 'all' || m.paymentMethod === selectedPaymentMethod;
+    const matchesPaymentMethod = selectedPaymentMethod === 'all' || formatPaymentMethod(m.paymentMethod) === selectedPaymentMethod;
     const matchesRenewal =
       selectedRenewal === 'all' ||
       (selectedRenewal === 'expired' && isExpired(m)) ||
@@ -154,10 +159,8 @@ export default function MembersPage({
     setPhone('');
     setDob('');
     setAddress('');
-    setPlan('Premium');
+    setPlan('Full Month');
     setStatus('active');
-    setNote('');
-    setSpecialty('');
     setEmergencyName('');
     setEmergencyRelation('');
     setEmergencyPhone('');
@@ -183,8 +186,6 @@ export default function MembersPage({
     setAddress(member.address || '');
     setPlan(member.plan || '');
     setStatus(member.status || 'active');
-    setNote(member.note || '');
-    setSpecialty(member.specialty || '');
     setEmergencyName(member.emergencyName || '');
     setEmergencyRelation(member.emergencyRelation || '');
     setEmergencyPhone(member.emergencyPhone || '');
@@ -202,7 +203,7 @@ export default function MembersPage({
     e.preventDefault();
 
     if (!name || !email || !phone || !plan) {
-      alert('Please fill out all required fields');
+      notify('Please fill out all required fields.', 'error');
       return;
     }
 
@@ -214,8 +215,6 @@ export default function MembersPage({
       address,
       plan,
       status,
-      note,
-      specialty,
       emergencyName,
       emergencyRelation,
       emergencyPhone,
@@ -225,16 +224,16 @@ export default function MembersPage({
     if (modalMode === 'edit' && editingMember) {
       const savedMember = await updateMember(editingMember.id, payload);
       if (savedMember) {
-        alert('Changes saved successfully.');
+        notify('Changes saved successfully.');
       } else {
-        alert('Unable to save changes. Please try again.');
+        notify('Unable to save changes. Please try again.', 'error');
       }
     } else {
       const createdMember = await addMember(payload);
       if (createdMember) {
-        alert('Member added successfully.');
+        notify('Member added successfully.');
       } else {
-        alert('Unable to add member. Please try again.');
+        notify('Unable to add member. Please try again.', 'error');
       }
     }
 
@@ -245,9 +244,9 @@ export default function MembersPage({
     if (memberToDelete) {
       const deleted = await deleteMember(memberToDelete.id);
       if (deleted) {
-        alert('Member deleted successfully.');
+        notify('Member deleted successfully.');
       } else {
-        alert('Unable to delete member. Please try again.');
+        notify('Unable to delete member. Please try again.', 'error');
       }
       setIsDeleteOpen(false);
       setMemberToDelete(null);
@@ -358,10 +357,10 @@ export default function MembersPage({
       member.phone,
       member.plan,
       member.status,
-      member.joined,
-      member.nextPaymentDue,
+      formatDisplayDate(member.joined, ''),
+      formatDisplayDate(member.nextPaymentDue, ''),
       member.paymentStatus,
-      member.paymentMethod,
+      formatPaymentMethod(member.paymentMethod),
       member.address,
       member.emergencyName,
       member.emergencyPhone
@@ -378,14 +377,14 @@ export default function MembersPage({
         <td>${escapeHtml(member.email)}</td>
         <td>${escapeHtml(member.plan)}</td>
         <td>${escapeHtml(member.status)}</td>
-        <td>${escapeHtml(member.nextPaymentDue || 'Not set')}</td>
+        <td>${escapeHtml(formatDisplayDate(member.nextPaymentDue))}</td>
         <td>${escapeHtml(member.paymentStatus || 'Pending')}</td>
       </tr>
     `).join('');
 
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Popup blocker detected. Please allow popups to print the report.');
+      notify('Popup blocker detected. Please allow popups to print the report.', 'error');
       return;
     }
 
@@ -409,7 +408,7 @@ export default function MembersPage({
       </head>
       <body>
         <h1>FitnessGym Members Report</h1>
-        <p>Generated ${new Date().toLocaleString()} · ${filtered.length} filtered members</p>
+        <p>Generated ${formatDisplayDate(new Date())} - ${filtered.length} filtered members</p>
         <section class="summary">
           <div><strong>${totalCount}</strong>Total members</div>
           <div><strong>${activeCount}</strong>Active</div>
@@ -655,12 +654,8 @@ export default function MembersPage({
               ) : (
                 paginated.map((member) => {
                   const memberIdStr = `MEM-${String(member.id).padStart(3, '0')}`;
-                  const joinedDateStr = member.joined
-                    ? new Date(member.joined).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                    : '—';
-                  const renewalDateStr = member.nextPaymentDue
-                    ? new Date(member.nextPaymentDue).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                    : 'Not set';
+                  const joinedDateStr = formatDisplayDate(member.joined, 'Not set');
+                  const renewalDateStr = formatDisplayDate(member.nextPaymentDue);
                   const paymentStatus = (member.paymentStatus || 'Pending').toLowerCase();
                   const avatarMarkup = member.photo ? (
                     <div className="avatar">
@@ -708,7 +703,7 @@ export default function MembersPage({
                         <span className={`status-badge ${paymentStatus === 'paid' ? 'status-active' : 'status-pending'}`}>
                           {member.paymentStatus || 'Pending'}
                         </span>
-                        <small className="table-subtext">{member.paymentMethod || 'No method'}</small>
+                        <small className="table-subtext">{formatPaymentMethod(member.paymentMethod)}</small>
                       </td>
                       <td>{joinedDateStr}</td>
                       <td>
@@ -746,7 +741,7 @@ export default function MembersPage({
           <div className="pagination-footer">
             <div className="pagination-info">
               <span>
-                Showing {startIdx + 1}–{endIdx} of {totalMatches} members
+                Showing {startIdx + 1}-{endIdx} of {totalMatches} members
               </span>
             </div>
             <div className="pagination">{renderPaginationButtons()}</div>
@@ -795,13 +790,11 @@ export default function MembersPage({
                 </label>
                 <label>
                   <span>Plan *</span>
-                  <input
-                    type="text"
-                    value={plan}
-                    onChange={(e) => setPlan(e.target.value)}
-                    placeholder="e.g. Premium, Basic, Standard"
-                    required
-                  />
+                  <select value={plan} onChange={(e) => setPlan(e.target.value)} required>
+                    <option value="Daily">Daily - PHP 50</option>
+                    <option value="Half Month">Half Month - PHP 250</option>
+                    <option value="Full Month">Full Month - PHP 400</option>
+                  </select>
                 </label>
                 <label>
                   <span>Status</span>
@@ -810,15 +803,6 @@ export default function MembersPage({
                     <option value="pending">Pending</option>
                     <option value="inactive">Inactive</option>
                   </select>
-                </label>
-                <label>
-                  <span>Specialty</span>
-                  <input
-                    type="text"
-                    value={specialty}
-                    onChange={(e) => setSpecialty(e.target.value)}
-                    placeholder="e.g. Yoga, Crossfit"
-                  />
                 </label>
                 <label>
                   <span>Emergency Contact Name</span>
@@ -831,15 +815,6 @@ export default function MembersPage({
                 <label>
                   <span>Emergency Phone</span>
                   <input type="text" value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} />
-                </label>
-                <label>
-                  <span>Coach / Goal note</span>
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    rows={3}
-                    placeholder="Add coaching note"
-                  />
                 </label>
                 <label>
                   <span>Profile Photo</span>

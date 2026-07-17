@@ -1,8 +1,6 @@
 import React, { useContext } from 'react';
 import { GymContext } from '../context/GymContextObject';
 import {
-  AlertTriangle,
-  ArrowRight,
   BarChart2,
   CalendarClock,
   CreditCard,
@@ -13,6 +11,7 @@ import {
   UserPlus,
   Users
 } from 'lucide-react';
+import { formatDisplayDate, formatPHP, parseCurrencyAmount } from '../utils/formatters';
 
 export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, setOpenRecordPaymentOnLoad }) {
   const { members, payments } = useContext(GymContext);
@@ -22,10 +21,8 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
 
-  const parseAmount = (amount) => Number(String(amount || '').replace(/[^0-9.]/g, '')) || 0;
-  const formatMoney = (value) => `PHP ${value.toLocaleString('en-PH')}`;
-  const formatDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  const formatFullDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const formatDate = (date) => formatDisplayDate(date);
+  const formatMethod = (method) => (String(method || '').toLowerCase() === 'gcash' ? 'GCash' : 'Cash');
 
   const getDueInfo = (member) => {
     const dueDate = member.nextPaymentDue ? new Date(member.nextPaymentDue) : null;
@@ -56,7 +53,7 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
       const paidDate = payment.paidISO ? new Date(payment.paidISO) : null;
       return payment.status === 'paid' && paidDate && paidDate.getMonth() === currentMonth && paidDate.getFullYear() === currentYear;
     })
-    .reduce((sum, payment) => sum + parseAmount(payment.amount), 0);
+    .reduce((sum, payment) => sum + parseCurrencyAmount(payment.amount), 0);
 
   const newMembersThisMonth = members.filter((member) => {
     const joined = member.joined ? new Date(member.joined) : null;
@@ -64,7 +61,7 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
   });
 
   const planCounts = members.reduce((acc, member) => {
-    const plan = member.plan || 'Basic';
+    const plan = member.plan || 'Full Month';
     acc[plan] = (acc[plan] || 0) + 1;
     return acc;
   }, {});
@@ -88,46 +85,13 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
     ? { background: `conic-gradient(${planEntries.map((entry) => entry.slice).join(', ')})` }
     : { background: '#1e293b' };
 
-  const alerts = [
-    {
-      label: 'Expired members',
-      value: expiredMembers.length,
-      tone: 'danger',
-      icon: AlertTriangle,
-      action: 'Review',
-      onClick: () => setActivePage('members')
-    },
-    {
-      label: 'Upcoming renewals',
-      value: upcomingRenewals.length,
-      tone: 'warning',
-      icon: CalendarClock,
-      action: 'Open',
-      onClick: () => setActivePage('members')
-    },
-    {
-      label: 'Pending payments',
-      value: pendingPaymentItems.length,
-      tone: 'warning',
-      icon: ReceiptText,
-      action: 'Collect',
-      onClick: () => setActivePage('payments')
-    },
-    {
-      label: 'New this month',
-      value: newMembersThisMonth.length,
-      tone: 'good',
-      icon: UserPlus,
-      action: 'View',
-      onClick: () => setActivePage('members')
-    }
-  ];
-
   const metricCards = [
-    { label: 'Total members', value: totalMembers, sub: `${activeMembers} active`, icon: Users },
-    { label: 'Monthly revenue', value: formatMoney(monthlyRevenue), sub: 'Paid payments this month', icon: DollarSign },
-    { label: 'Pending payments', value: pendingPaymentItems.length, sub: 'Needs follow-up', icon: CreditCard },
-    { label: 'Renewals due', value: upcomingRenewals.length, sub: 'Next 14 days', icon: CalendarClock }
+    { label: 'Monthly revenue', value: formatPHP(monthlyRevenue), sub: 'Paid payments this month', icon: DollarSign },
+    { label: 'Active members', value: activeMembers, sub: `${totalMembers} total members`, icon: Users },
+    { label: 'Expired members', value: expiredMembers.length, sub: 'Needs immediate follow-up', icon: CalendarClock },
+    { label: 'Upcoming renewals', value: upcomingRenewals.length, sub: 'Due in the next 14 days', icon: ReceiptText },
+    { label: 'Pending payments', value: pendingPaymentItems.length, sub: 'Pending or overdue invoices', icon: CreditCard },
+    { label: 'New this month', value: newMembersThisMonth.length, sub: 'Recently joined members', icon: UserPlus }
   ];
 
   const recentPaidPayments = payments
@@ -167,22 +131,6 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
         </div>
       </header>
 
-      <section className="dashboard-alert-strip">
-        {alerts.map((alert) => {
-          const Icon = alert.icon;
-          return (
-            <button key={alert.label} type="button" className={`alert-tile alert-${alert.tone}`} onClick={alert.onClick}>
-              <span className="alert-icon"><Icon size={18} /></span>
-              <span>
-                <strong>{alert.value}</strong>
-                <small>{alert.label}</small>
-              </span>
-              <span className="alert-action">{alert.action}<ArrowRight size={13} /></span>
-            </button>
-          );
-        })}
-      </section>
-
       <section className="dashboard-metrics">
         {metricCards.map((metric) => {
           const Icon = metric.icon;
@@ -216,7 +164,7 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
                 <div key={`${member.id}-${member.due.days}`} className="watchlist-row">
                   <div>
                     <strong>{member.name}</strong>
-                    <span>{member.plan || 'Basic'} plan - {formatFullDate(member.due.dueDate)}</span>
+                    <span>{member.plan || 'Full Month'} plan - {formatDisplayDate(member.due.dueDate)}</span>
                   </div>
                   <span className={`status-badge ${isExpired ? 'status-inactive' : 'status-pending'}`}>
                     {isExpired ? `${Math.abs(member.due.days)}d expired` : member.due.days === 0 ? 'Due today' : `${member.due.days}d left`}
@@ -247,7 +195,7 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
                   <span>{payment.invoice || 'No invoice'} - {payment.plan}</span>
                 </div>
                 <div className="queue-amount">
-                  <strong>{payment.amount}</strong>
+                  <strong>{formatPHP(payment.amount)}</strong>
                   <span className={`status-badge ${payment.status === 'overdue' ? 'status-inactive' : 'status-pending'}`}>
                     {payment.status}
                   </span>
@@ -275,14 +223,18 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
               </span>
             </div>
             <div className="plan-list">
-              {planEntries.map((entry) => (
-                <div key={entry.plan} className="plan-row">
-                  <span className="legend-dot" style={{ background: entry.color }}></span>
-                  <strong>{entry.plan}</strong>
-                  <small>{entry.count} members</small>
-                  <b>{entry.percentage}%</b>
-                </div>
-              ))}
+              {planEntries.length === 0 ? (
+                <div className="empty-inline">No membership plans recorded yet.</div>
+              ) : (
+                planEntries.map((entry) => (
+                  <div key={entry.plan} className="plan-row">
+                    <span className="legend-dot" style={{ background: entry.color }}></span>
+                    <strong>{entry.plan}</strong>
+                    <small>{entry.count} members</small>
+                    <b>{entry.percentage}%</b>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -300,9 +252,9 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
               <div key={payment.id} className="queue-row">
                 <div>
                   <strong>{payment.member}</strong>
-                  <span>{payment.paidISO ? formatDate(new Date(payment.paidISO)) : payment.paid} - {(payment.method || 'cash').toUpperCase()}</span>
+                  <span>{payment.paidISO ? formatDate(new Date(payment.paidISO)) : payment.paid} - {formatMethod(payment.method)}</span>
                 </div>
-                <strong>{payment.amount}</strong>
+                <strong>{formatPHP(payment.amount)}</strong>
               </div>
             ))}
             {recentPaidPayments.length === 0 && (

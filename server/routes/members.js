@@ -75,12 +75,22 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
+    const existingMember = await Member.findOne({ id: Number(req.params.id) }).lean();
+    if (!existingMember) return res.status(404).json({ error: 'Member not found' });
+
     const member = await Member.findOneAndUpdate(
       { id: Number(req.params.id) },
       req.body,
       { new: true, runValidators: true }
     ).lean();
-    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    if (req.body.name && req.body.name !== existingMember.name) {
+      await Payment.updateMany(
+        { memberId: member.id },
+        { $set: { member: member.name } }
+      );
+    }
+
     res.json(member);
   } catch (err) {
     res.status(400).json({ error: err.message });

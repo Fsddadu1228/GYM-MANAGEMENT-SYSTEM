@@ -1,375 +1,461 @@
 import React, { useContext, useState } from 'react';
+import { Download, Printer } from 'lucide-react';
 import { GymContext } from '../context/GymContextObject';
+import { formatDisplayDate, formatPHP, parseCurrencyAmount, toLocalISODate } from '../utils/formatters';
 
 export default function ReportsPage() {
   const { members, payments } = useContext(GymContext);
 
-  // Initialize default date filters (last 6 months)
-  const defaultToDate = new Date().toISOString().slice(0, 10);
+  const defaultToDate = toLocalISODate();
   const defaultFromDate = (() => {
     const d = new Date();
     d.setMonth(d.getMonth() - 5);
-    return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+    return toLocalISODate(new Date(d.getFullYear(), d.getMonth(), 1));
   })();
 
   const [fromDate, setFromDate] = useState(defaultFromDate);
   const [toDate, setToDate] = useState(defaultToDate);
   const [planVal, setPlanVal] = useState('all');
-  const [statusVal, setStatusVal] = useState('all');
+  const [paymentStatusVal, setPaymentStatusVal] = useState('all');
+  const [memberStatusVal, setMemberStatusVal] = useState('all');
 
-  const normalizePlan = (plan) => String(plan || '').toLowerCase();
+  const reportRangeLabel = `${fromDate || 'Start'} to ${toDate || 'Today'}`;
+  const todayISO = toLocalISODate();
 
-  // Filter payments
-  const filteredPayments = payments.filter((p) => {
-    if (planVal !== 'all' && normalizePlan(p.plan) !== planVal) return false;
-    if (statusVal !== 'all' && p.status !== statusVal) return false;
+  const normalize = (value) => String(value || '').toLowerCase();
+  const normalizePlan = (value) => normalize(value || 'Full Month');
+  const normalizeMethod = (value) => (normalize(value) === 'gcash' ? 'gcash' : 'cash');
+  const formatMonthKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const getPaymentDate = (payment) => payment.paidISO || payment.coverageEnd || payment.dueISO || payment.due || '';
 
-    const pDate = p.paidISO || p.dueISO;
-    if (pDate) {
-      if (fromDate && pDate < fromDate) return false;
-      if (toDate && pDate > toDate) return false;
-    }
+  const dateInRange = (dateValue) => {
+    const isoDate = formatDisplayDate(dateValue, '');
+    if (!isoDate) return false;
+    if (fromDate && isoDate < fromDate) return false;
+    if (toDate && isoDate > toDate) return false;
     return true;
-  });
-
-  // Filter members
-  const filteredMembers = members.filter((m) => {
-    if (planVal !== 'all' && normalizePlan(m.plan) !== planVal) return false;
-    if (statusVal !== 'all' && m.status !== statusVal) return false;
-
-    if (m.joined) {
-      if (fromDate && m.joined < fromDate) return false;
-      if (toDate && m.joined > toDate) return false;
-    }
-    return true;
-  });
-
-  // 1. KPI Calculations
-  const totalRevenue = filteredPayments
-    .filter((p) => p.status === 'paid')
-    .reduce((sum, p) => sum + Number((p.amount || '').replace(/[₱,]/g, '')), 0);
-
-  const currentMonthIndex = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  const trendFilterLabel = 'Values follow current filters';
-  const monthlyRevenue = filteredPayments
-    .filter((p) => {
-      if (p.status !== 'paid' || !p.paidISO) return false;
-      const d = new Date(p.paidISO);
-      return d.getMonth() === currentMonthIndex && d.getFullYear() === currentYear;
-    })
-    .reduce((sum, p) => sum + Number((p.amount || '').replace(/[₱,]/g, '')), 0);
-
-  const activeCount = filteredMembers.filter((m) => m.status === 'active').length;
-  const totalPaymentsCount = filteredPayments.length;
-
-  // Formatting helpers
-  const formatPHP = (amt) => `₱${Number(amt).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
-  const formatShortPHP = (amt) => amt >= 1000 ? `₱${(amt / 1000).toFixed(1)}k` : `₱${amt}`;
-
-  // 2. Bar Chart Data (Last 4 Months)
-  const last4Months = (() => {
-    const list = [];
-    const today = new Date();
-    for (let i = 3; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      list.push({
-        name: d.toLocaleDateString('en-US', { month: 'short' }),
-        year: d.getFullYear(),
-        monthIndex: d.getMonth()
-      });
-    }
-    return list;
-  })();
-
-  const barChartData = last4Months.map((m) => {
-    const rev = filteredPayments
-      .filter((p) => {
-        if (p.status !== 'paid' || !p.paidISO) return false;
-        const d = new Date(p.paidISO);
-        return d.getMonth() === m.monthIndex && d.getFullYear() === m.year;
-      })
-      .reduce((sum, p) => sum + Number((p.amount || '').replace(/[₱,]/g, '')), 0);
-    return { ...m, revenue: rev };
-  });
-
-  const maxRevenue = Math.max(...barChartData.map((d) => d.revenue), 1000);
-
-  // 3. Growth Line Data (Last 5 Months)
-  const last5Months = (() => {
-    const list = [];
-    const today = new Date();
-    for (let i = 4; i >= 0; i--) {
-      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      list.push({
-        name: d.toLocaleDateString('en-US', { month: 'short' }),
-        year: d.getFullYear(),
-        monthIndex: d.getMonth()
-      });
-    }
-    return list;
-  })();
-
-  const growthTimeline = (() => {
-    // Cumulative calculation
-    const startOfTimeline = new Date(last5Months[0].year, last5Months[0].monthIndex, 1);
-    let baseCount = filteredMembers.filter((m) => {
-      if (!m.joined) return false;
-      const d = new Date(m.joined);
-      return d < startOfTimeline;
-    }).length;
-
-    return last5Months.map((m) => {
-      const count = filteredMembers.filter((member) => {
-        if (!member.joined) return false;
-        const d = new Date(member.joined);
-        return d.getMonth() === m.monthIndex && d.getFullYear() === m.year;
-      }).length;
-      baseCount += count;
-      return { ...m, cumulative: baseCount };
-    });
-  })();
-
-  const maxGrowthVal = Math.max(...growthTimeline.map((d) => d.cumulative), 5);
-
-  // SVG dimensions
-  const xCoords = [18, 112, 206, 300, 402];
-  const yCoords = growthTimeline.map((val) => {
-    const ratio = val.cumulative / maxGrowthVal;
-    return 140 - ratio * 100; // scale between y=140 and y=40
-  });
-
-  const pointsPath = xCoords.map((x, idx) => `${x} ${yCoords[idx]}`).join(' L ');
-  const growthPathStr = `M ${pointsPath}`;
-  const growthAreaStr = `M ${xCoords[0]} 180 L ${pointsPath} L ${xCoords[xCoords.length - 1]} 180 Z`;
-
-  // 4. Plan Mix Distribution Donut
-  const planCounts = { Premium: 0, Standard: 0, Basic: 0 };
-  filteredMembers.forEach((m) => {
-    const p = m.plan || 'Basic';
-    const planName = p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
-    if (planCounts[planName] !== undefined) {
-      planCounts[planName]++;
-    }
-  });
-
-  const totalPlans = Object.values(planCounts).reduce((a, b) => a + b, 0);
-
-  const colors = {
-    Premium: '#3b82f6',
-    Standard: '#60a5fa',
-    Basic: '#93c5fd'
   };
 
-  const conicSlices = [];
-  let currentPercentage = 0;
-
-  const planPercentages = Object.entries(planCounts).map(([planName, count]) => {
-    const pct = totalPlans > 0 ? (count / totalPlans) * 100 : 0;
-    const startAngle = currentPercentage;
-    currentPercentage += pct;
-    const endAngle = currentPercentage;
-
-    if (pct > 0) {
-      conicSlices.push(`${colors[planName]} ${startAngle}% ${endAngle}%`);
-    }
-
-    return { planName, count, percentage: Math.round(pct) };
+  const paymentsInDateRange = payments.filter((payment) => {
+    if (!dateInRange(getPaymentDate(payment))) return false;
+    if (planVal !== 'all' && normalizePlan(payment.plan) !== planVal) return false;
+    if (paymentStatusVal !== 'all' && normalize(payment.status) !== paymentStatusVal) return false;
+    return true;
   });
 
-  const donutStyle = conicSlices.length > 0
-    ? { background: `conic-gradient(${conicSlices.join(', ')})` }
+  const reportMembers = members.filter((member) => {
+    if (planVal !== 'all' && normalizePlan(member.plan) !== planVal) return false;
+    if (memberStatusVal !== 'all' && normalize(member.status) !== memberStatusVal) return false;
+
+    const memberPaymentsInRange = paymentsInDateRange.some((payment) => (
+      (payment.memberId && Number(payment.memberId) === Number(member.id)) ||
+      normalize(payment.member) === normalize(member.name)
+    ));
+
+    return dateInRange(member.joined) || dateInRange(member.nextPaymentDue) || memberPaymentsInRange;
+  });
+
+  const paidPayments = paymentsInDateRange.filter((payment) => payment.status === 'paid');
+  const totalRevenue = paidPayments.reduce((sum, payment) => sum + parseCurrencyAmount(payment.amount), 0);
+  const pendingPayments = paymentsInDateRange.filter((payment) => payment.status === 'pending').length;
+  const overduePayments = paymentsInDateRange.filter((payment) => payment.status === 'overdue').length;
+  const activeMembers = reportMembers.filter((member) => member.status === 'active').length;
+  const inactiveMembers = reportMembers.filter((member) => member.status !== 'active').length;
+  const expiredMembers = reportMembers
+    .filter((member) => member.nextPaymentDue && member.nextPaymentDue < todayISO)
+    .sort((a, b) => String(a.nextPaymentDue).localeCompare(String(b.nextPaymentDue)));
+
+  const monthBuckets = (() => {
+    const startDate = fromDate ? new Date(`${fromDate}T00:00:00`) : new Date();
+    const endDate = toDate ? new Date(`${toDate}T00:00:00`) : new Date();
+    const start = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+    const end = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+    const buckets = [];
+    const cursor = new Date(start);
+
+    while (cursor <= end && buckets.length < 12) {
+      buckets.push({
+        key: formatMonthKey(cursor),
+        label: formatMonthKey(cursor),
+        revenue: 0,
+        payments: 0
+      });
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    return buckets.length ? buckets : [{ key: formatMonthKey(new Date()), label: formatMonthKey(new Date()), revenue: 0, payments: 0 }];
+  })();
+
+  const revenueByMonth = monthBuckets.map((bucket) => {
+    const monthPayments = paidPayments.filter((payment) => formatMonthKey(new Date(`${getPaymentDate(payment)}T00:00:00`)) === bucket.key);
+    return {
+      ...bucket,
+      payments: monthPayments.length,
+      revenue: monthPayments.reduce((sum, payment) => sum + parseCurrencyAmount(payment.amount), 0)
+    };
+  });
+
+  const maxRevenue = Math.max(...revenueByMonth.map((item) => item.revenue), 1000);
+  const hasRevenueData = revenueByMonth.some((item) => item.revenue > 0);
+
+  const methodLabels = {
+    cash: 'Cash',
+    gcash: 'GCash'
+  };
+
+  const paymentsByMethod = Object.entries(methodLabels).map(([method, label]) => {
+    const methodPayments = paymentsInDateRange.filter((payment) => normalizeMethod(payment.method) === method);
+    const paidMethodPayments = methodPayments.filter((payment) => payment.status === 'paid');
+    return {
+      method,
+      label,
+      count: methodPayments.length,
+      revenue: paidMethodPayments.reduce((sum, payment) => sum + parseCurrencyAmount(payment.amount), 0)
+    };
+  });
+
+  const maxMethodCount = Math.max(...paymentsByMethod.map((item) => item.count), 1);
+  const totalScopedMembers = activeMembers + inactiveMembers;
+  const activePercent = totalScopedMembers > 0 ? Math.round((activeMembers / totalScopedMembers) * 100) : 0;
+  const inactivePercent = totalScopedMembers > 0 ? 100 - activePercent : 0;
+  const statusDonutStyle = totalScopedMembers > 0
+    ? { background: `conic-gradient(#14b8a6 0% ${activePercent}%, #f43f5e ${activePercent}% 100%)` }
     : { background: '#1e293b' };
 
+  const csvCell = (value) => {
+    const cleanValue = String(value ?? '');
+    return /[",\n]/.test(cleanValue) ? `"${cleanValue.replace(/"/g, '""')}"` : cleanValue;
+  };
+
+  const downloadTextFile = (filename, content, type = 'text/csv;charset=utf-8') => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+
+  const handleExportCsv = () => {
+    const summaryRows = [
+      ['Section', 'Metric', 'Value'],
+      ['Summary', 'Date range', reportRangeLabel],
+      ['Summary', 'Total revenue', formatPHP(totalRevenue)],
+      ['Summary', 'Payments', paymentsInDateRange.length],
+      ['Summary', 'Active members', activeMembers],
+      ['Summary', 'Inactive members', inactiveMembers],
+      ['Summary', 'Expired memberships', expiredMembers.length],
+      [],
+      ['Revenue by month', 'Month', 'Revenue', 'Paid payments'],
+      ...revenueByMonth.map((item) => ['Revenue by month', item.label, formatPHP(item.revenue), item.payments]),
+      [],
+      ['Payments by method', 'Method', 'Payments', 'Paid revenue'],
+      ...paymentsByMethod.map((item) => ['Payments by method', item.label, item.count, formatPHP(item.revenue)]),
+      [],
+      ['Expired memberships', 'Member', 'Plan', 'Renewal date', 'Status'],
+      ...expiredMembers.map((member) => ['Expired memberships', member.name, member.plan, formatDisplayDate(member.nextPaymentDue), member.status])
+    ];
+
+    const csv = summaryRows.map((row) => row.map(csvCell).join(',')).join('\n');
+    downloadTextFile(`FitnessGym-report-${toLocalISODate()}.csv`, csv);
+  };
+
+  const handlePrintPdf = () => {
+    const revenueRows = revenueByMonth.map((item) => `
+      <tr><td>${escapeHtml(item.label)}</td><td>${escapeHtml(formatPHP(item.revenue))}</td><td>${item.payments}</td></tr>
+    `).join('');
+    const methodRows = paymentsByMethod.map((item) => `
+      <tr><td>${escapeHtml(item.label)}</td><td>${item.count}</td><td>${escapeHtml(formatPHP(item.revenue))}</td></tr>
+    `).join('');
+    const expiredRows = expiredMembers.map((member) => `
+      <tr><td>${escapeHtml(member.name)}</td><td>${escapeHtml(member.plan)}</td><td>${escapeHtml(formatDisplayDate(member.nextPaymentDue))}</td><td>${escapeHtml(member.status)}</td></tr>
+    `).join('');
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    printWindow.document.open();
+    printWindow.document.write(`
+      <!doctype html>
+      <html>
+      <head>
+        <title>FitnessGym Business Report</title>
+        <style>
+          body { font-family: Segoe UI, Arial, sans-serif; padding: 32px; color: #172033; }
+          h1 { margin: 0 0 6px; }
+          h2 { margin: 26px 0 10px; font-size: 18px; }
+          p { margin: 0 0 18px; color: #64748b; }
+          .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }
+          .summary div { border: 1px solid #dbe4ef; border-radius: 10px; padding: 12px; }
+          .summary strong { display: block; font-size: 20px; color: #0f172a; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th { text-align: left; color: #334155; background: #eef2f7; }
+          th, td { padding: 9px 10px; border-bottom: 1px solid #dbe4ef; }
+        </style>
+      </head>
+      <body>
+        <h1>FitnessGym Business Report</h1>
+        <p>Date range: ${escapeHtml(reportRangeLabel)}. Filters apply to all sections.</p>
+        <section class="summary">
+          <div><strong>${escapeHtml(formatPHP(totalRevenue))}</strong>Total revenue</div>
+          <div><strong>${paymentsInDateRange.length}</strong>Payments</div>
+          <div><strong>${activeMembers}</strong>Active members</div>
+          <div><strong>${expiredMembers.length}</strong>Expired memberships</div>
+        </section>
+        <h2>Revenue by Month</h2>
+        <table><thead><tr><th>Month</th><th>Revenue</th><th>Paid payments</th></tr></thead><tbody>${revenueRows}</tbody></table>
+        <h2>Payments by Method</h2>
+        <table><thead><tr><th>Method</th><th>Payments</th><th>Paid revenue</th></tr></thead><tbody>${methodRows}</tbody></table>
+        <h2>Expired Memberships</h2>
+        <table><thead><tr><th>Member</th><th>Plan</th><th>Renewal date</th><th>Status</th></tr></thead><tbody>${expiredRows || '<tr><td colspan="4">No expired memberships in this range.</td></tr>'}</tbody></table>
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
-    <div style={{ width: '100%' }}>
+    <div className="reports-page">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Gym management</p>
+          <p className="eyebrow">Business intelligence</p>
           <h1>Reports</h1>
+          <p className="dashboard-subtitle">Revenue, payments, membership status, and expiry risk for {reportRangeLabel}.</p>
+        </div>
+        <div className="report-actions">
+          <button type="button" className="secondary-btn icon-text-btn" onClick={handleExportCsv}>
+            <Download size={16} /> CSV
+          </button>
+          <button type="button" className="primary-btn icon-text-btn" onClick={handlePrintPdf}>
+            <Printer size={16} /> PDF
+          </button>
         </div>
       </header>
 
-      {/* Stats Widgets */}
-      <section className="stats-grid">
+      <section className="panel report-filter-panel">
+        <div className="panel-header">
+          <div>
+            <h2>Report filters</h2>
+            <p>Date range, plan, payment status, and member status apply to every section below.</p>
+          </div>
+        </div>
+
+        <div className="panel-toolbar-new report-filter-grid">
+          <div className="toolbar-group">
+            <label htmlFor="fromDate">From</label>
+            <input id="fromDate" type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          </div>
+          <div className="toolbar-group">
+            <label htmlFor="toDate">To</label>
+            <input id="toDate" type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          </div>
+          <div className="toolbar-group">
+            <label htmlFor="planFilter">Plan</label>
+            <select id="planFilter" value={planVal} onChange={(e) => setPlanVal(e.target.value)} className="select-inline">
+              <option value="all">All plans</option>
+              <option value="daily">Daily</option>
+              <option value="half month">Half Month</option>
+              <option value="full month">Full Month</option>
+            </select>
+          </div>
+          <div className="toolbar-group">
+            <label htmlFor="paymentStatusFilter">Payment status</label>
+            <select id="paymentStatusFilter" value={paymentStatusVal} onChange={(e) => setPaymentStatusVal(e.target.value)} className="select-inline">
+              <option value="all">All payments</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+              <option value="overdue">Overdue</option>
+            </select>
+          </div>
+          <div className="toolbar-group">
+            <label htmlFor="memberStatusFilter">Member status</label>
+            <select id="memberStatusFilter" value={memberStatusVal} onChange={(e) => setMemberStatusVal(e.target.value)} className="select-inline">
+              <option value="all">All members</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="pending">Pending</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section className="stats-grid report-kpi-grid">
         <article className="stat-card">
           <h3>Total Revenue</h3>
           <p className="stat-value">{formatPHP(totalRevenue)}</p>
           <small className="stat-note">Paid payments only</small>
         </article>
         <article className="stat-card">
-          <h3>Monthly Revenue</h3>
-          <p className="stat-value">{formatPHP(monthlyRevenue)}</p>
+          <h3>Payments</h3>
+          <p className="stat-value">{paymentsInDateRange.length}</p>
+          <small className="stat-note">{pendingPayments} pending, {overduePayments} overdue</small>
         </article>
         <article className="stat-card">
           <h3>Active Members</h3>
-          <p className="stat-value">{activeCount}</p>
+          <p className="stat-value">{activeMembers}</p>
+          <small className="stat-note">{inactiveMembers} inactive or pending</small>
         </article>
         <article className="stat-card">
-          <h3>Total Payments</h3>
-          <p className="stat-value">{totalPaymentsCount}</p>
+          <h3>Expired Memberships</h3>
+          <p className="stat-value">{expiredMembers.length}</p>
+          <small className="stat-note">Renewal date before {todayISO}</small>
         </article>
       </section>
 
-      {/* Reports Panel */}
-      <section className="panel">
-        <div className="panel-header">
-          <h2>Report filters</h2>
-        </div>
-
-        {/* Filter Input controls */}
-        <div className="panel-toolbar-new">
-          <div className="toolbar-left" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <div className="toolbar-group" style={{ minWidth: '150px' }}>
-              <label htmlFor="fromDate">From</label>
-              <input
-                id="fromDate"
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
+      <section className="charts-grid reports-business-grid">
+        <article className="chart-card chart-card-wide report-chart-card">
+          <div className="chart-card-header">
+            <div>
+              <h3>Revenue by Month</h3>
+              <p>Paid revenue grouped by payment month.</p>
             </div>
-            <div className="toolbar-group" style={{ minWidth: '150px' }}>
-              <label htmlFor="toDate">To</label>
-              <input
-                id="toDate"
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
+            <div className="chart-meta">
+              <strong>{formatPHP(totalRevenue)}</strong>
+              <span>{paidPayments.length} paid</span>
             </div>
           </div>
-
-          <div className="toolbar-right">
-            <div className="toolbar-group-inline">
-              <label htmlFor="planFilter">Membership Plan</label>
-              <select
-                id="planFilter"
-                value={planVal}
-                onChange={(e) => setPlanVal(e.target.value)}
-                className="select-inline"
-              >
-                <option value="all">All</option>
-                <option value="basic">Basic</option>
-                <option value="standard">Standard</option>
-                <option value="premium">Premium</option>
-              </select>
-            </div>
-
-            <div className="toolbar-group-inline">
-              <label htmlFor="statusFilter">Payment Status</label>
-              <select
-                id="statusFilter"
-                value={statusVal}
-                onChange={(e) => setStatusVal(e.target.value)}
-                className="select-inline"
-              >
-                <option value="all">All</option>
-                <option value="paid">Paid</option>
-                <option value="pending">Pending</option>
-                <option value="overdue">Overdue</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Charts Grid Layout */}
-        <div className="charts-grid">
-          {/* Revenue Bar Chart */}
-          <article className="chart-card">
-            <div className="chart-card-header">
-              <div>
-                <h3>Monthly Revenue</h3>
-                <p>Last 4 months - {trendFilterLabel}</p>
-              </div>
-            </div>
-            <div className="chart-placeholder chart-bar" aria-label="Monthly revenue by month" style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-around' }}>
-              <div className="axis-lines"></div>
-              {barChartData.map((d, index) => {
-                const heightPercent = (d.revenue / maxRevenue) * 80 + 10;
-                return (
-                  <div key={index} className="revenue-bar-wrap" style={{ height: '100%' }}>
-                    <div className="revenue-bar" style={{ height: `${heightPercent}%` }}>
-                      <span>{formatShortPHP(d.revenue)}</span>
+          <div className="chart-placeholder chart-bar report-revenue-chart" aria-label="Revenue by month">
+            {!hasRevenueData ? (
+              <div className="chart-empty-state">No paid revenue in this date range.</div>
+            ) : (
+              <>
+                <div className="axis-lines"></div>
+                <div className="chart-y-axis">
+                  <span>{formatPHP(maxRevenue)}</span>
+                  <span>{formatPHP(maxRevenue / 2)}</span>
+                  <span>0</span>
+                </div>
+                {revenueByMonth.map((item) => {
+                  const heightPercent = item.revenue > 0 ? Math.max((item.revenue / maxRevenue) * 88, 12) : 0;
+                  return (
+                    <div key={item.key} className="revenue-bar-wrap report-revenue-bar-wrap" title={`${item.label}: ${formatPHP(item.revenue)}`}>
+                      <div className="report-bar-track">
+                        <div className={`revenue-bar report-revenue-bar ${item.revenue === 0 ? 'is-empty' : ''}`} style={{ height: `${heightPercent}%` }}>
+                          {item.revenue > 0 && <span>{formatPHP(item.revenue)}</span>}
+                        </div>
+                      </div>
+                      <small>
+                        <strong>{item.label}</strong>
+                        <span>{item.payments} paid</span>
+                      </small>
                     </div>
-                    <small>{d.name}</small>
-                  </div>
-                );
-              })}
-            </div>
-          </article>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </article>
 
-          {/* Member Growth SVG Line Chart */}
-          <article className="chart-card">
-            <div className="chart-card-header">
-              <div>
-                <h3>Member Growth</h3>
-                <p>New signups (cumulative) - {trendFilterLabel}</p>
-              </div>
+        <article className="chart-card report-chart-card">
+          <div className="chart-card-header">
+            <div>
+              <h3>Payments by Method</h3>
+              <p>Volume and collected revenue by payment type.</p>
             </div>
-            <div className="chart-placeholder chart-line" aria-label="Member growth by month">
-              <div className="axis-lines"></div>
-              <div className="line-plot" style={{ minHeight: '180px', position: 'relative' }}>
-                <svg className="growth-line" viewBox="0 0 420 180" role="img" aria-hidden="true" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                  <defs>
-                    <linearGradient id="growthArea" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.25" />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  <path className="growth-area" d={growthAreaStr} fill="url(#growthArea)"></path>
-                  <path className="growth-path" d={growthPathStr} fill="none" stroke="#2563eb" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round"></path>
-                </svg>
-                {xCoords.map((x, idx) => (
-                  <span
-                    key={idx}
-                    className="line-dot"
-                    style={{
-                      left: `${(x / 420) * 100}%`,
-                      top: `${(yCoords[idx] / 180) * 100}%`,
-                      position: 'absolute',
-                      transform: 'translate(-50%, -50%)'
-                    }}
-                  >
-                    <strong>{growthTimeline[idx].cumulative}</strong>
-                  </span>
-                ))}
+          </div>
+          <div className="report-method-list">
+            {paymentsByMethod.map((item) => (
+              <div key={item.method} className="report-method-row">
+                <div>
+                  <strong>{item.label}</strong>
+                  <span>{formatPHP(item.revenue)} collected</span>
+                </div>
+                <div className="report-meter">
+                  <span style={{ width: `${Math.max((item.count / maxMethodCount) * 100, item.count ? 8 : 0)}%` }}></span>
+                </div>
+                <b>{item.count}</b>
               </div>
-              <div className="line-labels">
-                {last5Months.map((m, idx) => (
-                  <span key={idx}>{m.name}</span>
-                ))}
-              </div>
-            </div>
-          </article>
+            ))}
+          </div>
+        </article>
 
-          {/* Membership Distribution Donut Chart */}
-          <article className="chart-card">
-            <div className="chart-card-header">
-              <div>
-                <h3>Membership Distribution</h3>
-                <p>Plan mix</p>
+        <article className="chart-card report-chart-card">
+          <div className="chart-card-header">
+            <div>
+              <h3>Active vs Inactive Members</h3>
+              <p>Membership status inside the current report scope.</p>
+            </div>
+          </div>
+          <div className="report-status-layout">
+            <div className="donut-chart report-status-donut" style={statusDonutStyle}>
+              <span>
+                {totalScopedMembers}
+                <small>members</small>
+              </span>
+            </div>
+            <div className="chart-legend">
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: '#14b8a6' }}></span>
+                <p>Active</p>
+                <strong>{activeMembers} ({activePercent}%)</strong>
+              </div>
+              <div className="legend-item">
+                <span className="legend-dot" style={{ background: '#f43f5e' }}></span>
+                <p>Inactive / pending</p>
+                <strong>{inactiveMembers} ({inactivePercent}%)</strong>
               </div>
             </div>
-            <div className="chart-placeholder distribution-chart" aria-label="Membership plan distribution">
-              <div className="donut-chart" style={donutStyle}>
-                <span>
-                  {totalPlans}
-                  <small>members</small>
-                </span>
-              </div>
-              <div className="chart-legend" style={{ gap: '8px' }}>
-                {planPercentages.map((p) => (
-                  <div key={p.planName} className="legend-item">
-                    <span className="legend-dot" style={{ background: colors[p.planName] }}></span>
-                    <p>{p.planName}</p>
-                    <strong>{p.count} ({p.percentage}%)</strong>
-                  </div>
-                ))}
-              </div>
+          </div>
+        </article>
+
+        <article className="chart-card chart-card-wide report-chart-card">
+          <div className="chart-card-header">
+            <div>
+              <h3>Expired Memberships</h3>
+              <p>Members whose renewal date has already passed.</p>
             </div>
-          </article>
-        </div>
+            <div className="chart-meta">
+              <strong>{expiredMembers.length} expired</strong>
+            </div>
+          </div>
+          <div className="table-wrap report-expired-table">
+            <table className="members-table-new">
+              <thead>
+                <tr>
+                  <th scope="col">Member</th>
+                  <th scope="col">Plan</th>
+                  <th scope="col">Renewal Date</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Last Payment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expiredMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="empty-state" style={{ textAlign: 'center', padding: '24px' }}>
+                      No expired memberships in this date range.
+                    </td>
+                  </tr>
+                ) : (
+                  expiredMembers.map((member) => (
+                    <tr key={member.id}>
+                      <td>{member.name}</td>
+                      <td>{member.plan}</td>
+                      <td>{formatDisplayDate(member.nextPaymentDue)}</td>
+                      <td>
+                        <span className={`status-badge status-${member.status}`}>
+                          {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                        </span>
+                      </td>
+                      <td>{member.lastPayment || 'Not recorded'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </article>
       </section>
     </div>
   );

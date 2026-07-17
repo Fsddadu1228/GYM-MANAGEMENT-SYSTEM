@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { ArrowRight, CheckCircle, Dumbbell, KeyRound, Lock, UserRound, Zap } from 'lucide-react';
+import { notify } from '../utils/toast';
 
 export default function LoginPage({ onLogin, requestAuth }) {
-  const [username, setUsername] = useState('coach.amy');
+  const [username, setUsername] = useState('admin.gym');
   const [password, setPassword] = useState('gym1234');
   const [rememberMe, setRememberMe] = useState(true);
   const [status, setStatus] = useState('idle');
@@ -79,7 +80,7 @@ export default function LoginPage({ onLogin, requestAuth }) {
               />
               <span>Keep me signed in</span>
             </label>
-            <button type="button" className="login-link" onClick={() => alert('Password reset is not configured yet.')}>
+            <button type="button" className="login-link" onClick={() => notify('Password reset is not configured yet.', 'info')}>
               Forgot password?
             </button>
           </div>
@@ -108,7 +109,7 @@ export default function LoginPage({ onLogin, requestAuth }) {
           </button>
 
           <div className="login-demo">
-            <span><UserRound size={13} /> demo: coach.amy</span>
+            <span><UserRound size={13} /> demo: admin.gym</span>
             <span><KeyRound size={13} /> gym1234</span>
           </div>
         </form>

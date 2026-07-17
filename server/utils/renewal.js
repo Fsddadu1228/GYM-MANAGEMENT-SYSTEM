@@ -1,7 +1,10 @@
 function toISODate(dateValue) {
   const date = dateValue instanceof Date ? dateValue : new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
-  return date.toISOString().slice(0, 10);
+  if (Number.isNaN(date.getTime())) return toISODate(new Date());
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function addMonths(dateValue, monthCount) {
@@ -23,6 +26,8 @@ function getPlanBillingCycle(plan = '') {
   const normalizedPlan = plan.toLowerCase();
 
   if (/\b(day|daily)\b/.test(normalizedPlan)) return { label: 'daily', days: 1 };
+  if (/\b(half|half\s*month|15\s*day)\b/.test(normalizedPlan)) return { label: 'half month', days: 15 };
+  if (/\b(full|full\s*month|month|monthly)\b/.test(normalizedPlan)) return { label: 'full month', months: 1 };
   if (/\b(week|weekly)\b/.test(normalizedPlan)) return { label: 'weekly', days: 7 };
   if (/\b(quarter|quarterly|3\s*month)\b/.test(normalizedPlan)) return { label: 'quarterly', months: 3 };
   if (/\b(semiannual|semi-annual|6\s*month)\b/.test(normalizedPlan)) return { label: 'semiannual', months: 6 };
@@ -39,20 +44,24 @@ function getNextPaymentDue(fromDate = new Date(), plan = '') {
   return toISODate(nextDueDate);
 }
 
+function formatPHP(value) {
+  const amount = Number(String(value || '').replace(/[^0-9.]/g, '')) || 0;
+  return `PHP ${amount.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
+}
+
 function formatShortDate(dateValue) {
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return toISODate(dateValue);
 }
 
 function buildRenewalDetails(payment, member) {
   const paidISO = payment.paidISO || toISODate(new Date());
-  const plan = payment.plan || member?.plan || 'Basic';
+  const plan = payment.plan || member?.plan || 'Full Month';
   const billingCycle = getPlanBillingCycle(plan);
   const coverageEnd = getNextPaymentDue(paidISO, plan);
 
   return {
     ...payment,
+    amount: formatPHP(payment.amount),
     plan,
     paidISO,
     paid: payment.paid || formatShortDate(paidISO),
