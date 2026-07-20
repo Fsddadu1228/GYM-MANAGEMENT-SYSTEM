@@ -8,6 +8,7 @@ const requireAuth = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const memberRoutes = require('./routes/members');
 const paymentRoutes = require('./routes/payments');
+const { syncExpiredStatuses } = require('./utils/statusSync');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -44,9 +45,17 @@ app.get('*', (req, res) => {
 async function start() {
   try {
     await connectDB();
+    await syncExpiredStatuses();
     app.listen(PORT, () => {
       console.log(`Server running at http://localhost:${PORT}`);
     });
+
+    const statusSyncTimer = setInterval(() => {
+      syncExpiredStatuses().catch((err) => {
+        console.error('Scheduled status sync failed:', err.message);
+      });
+    }, 15 * 60 * 1000);
+    statusSyncTimer.unref();
   } catch (err) {
     console.error('Failed to start server:', err.message);
     process.exit(1);

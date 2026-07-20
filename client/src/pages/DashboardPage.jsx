@@ -12,6 +12,8 @@ import {
   Users
 } from 'lucide-react';
 import { formatDisplayDate, formatPHP, parseCurrencyAmount } from '../utils/formatters';
+import { getDerivedMemberStatus, getMemberDueInfo } from '../utils/memberStatus';
+import { getDerivedPaymentStatus } from '../utils/paymentStatus';
 
 export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, setOpenRecordPaymentOnLoad }) {
   const { members, payments } = useContext(GymContext);
@@ -20,70 +22,41 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
   today.setHours(0, 0, 0, 0);
   const currentMonth = today.getMonth();
   const currentYear = today.getFullYear();
+  const todayISO = formatDisplayDate(today);
 
   const formatDate = (date) => formatDisplayDate(date);
   const formatMethod = (method) => (String(method || '').toLowerCase() === 'gcash' ? 'GCash' : 'Cash');
-
-  const getDueInfo = (member) => {
-    const dueDate = member.nextPaymentDue ? new Date(member.nextPaymentDue) : null;
-    if (!dueDate || Number.isNaN(dueDate.getTime())) return null;
-    dueDate.setHours(0, 0, 0, 0);
-    const days = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
-    return { dueDate, days };
-  };
-
-  const totalMembers = members.length;
-  const activeMembers = members.filter((member) => member.status === 'active').length;
+  const workingMembers = members;
+  const totalMembers = workingMembers.length;
+  const activeMemberRecords = workingMembers.filter((member) => getDerivedMemberStatus(member, todayISO) === 'active');
+  const activeMembers = activeMemberRecords.length;
   const expiredMembers = members
-    .map((member) => ({ ...member, due: getDueInfo(member) }))
+    .map((member) => ({ ...member, due: getMemberDueInfo(member, todayISO) }))
     .filter((member) => member.due && member.due.days < 0)
     .sort((a, b) => a.due.days - b.due.days);
 
-  const upcomingRenewals = members
-    .map((member) => ({ ...member, due: getDueInfo(member) }))
+  const upcomingRenewals = workingMembers
+    .map((member) => ({ ...member, due: getMemberDueInfo(member, todayISO) }))
     .filter((member) => member.due && member.due.days >= 0 && member.due.days <= 14)
     .sort((a, b) => a.due.days - b.due.days);
+  const watchlistItems = [...expiredMembers, ...upcomingRenewals].sort((a, b) => a.due.days - b.due.days);
+  const visibleWatchlistItems = watchlistItems.slice(0, 7);
 
   const pendingPaymentItems = payments
-    .filter((payment) => payment.status === 'pending' || payment.status === 'overdue')
-    .sort((a, b) => String(a.status).localeCompare(String(b.status)));
+    .filter((payment) => ['pending', 'overdue'].includes(getDerivedPaymentStatus(payment, todayISO)))
+    .sort((a, b) => getDerivedPaymentStatus(a, todayISO).localeCompare(getDerivedPaymentStatus(b, todayISO)));
 
   const monthlyRevenue = payments
     .filter((payment) => {
       const paidDate = payment.paidISO ? new Date(payment.paidISO) : null;
-      return payment.status === 'paid' && paidDate && paidDate.getMonth() === currentMonth && paidDate.getFullYear() === currentYear;
+      return getDerivedPaymentStatus(payment, todayISO) === 'paid' && paidDate && paidDate.getMonth() === currentMonth && paidDate.getFullYear() === currentYear;
     })
     .reduce((sum, payment) => sum + parseCurrencyAmount(payment.amount), 0);
 
-  const newMembersThisMonth = members.filter((member) => {
+  const newMembersThisMonth = workingMembers.filter((member) => {
     const joined = member.joined ? new Date(member.joined) : null;
     return joined && joined.getMonth() === currentMonth && joined.getFullYear() === currentYear;
   });
-
-  const planCounts = members.reduce((acc, member) => {
-    const plan = member.plan || 'Full Month';
-    acc[plan] = (acc[plan] || 0) + 1;
-    return acc;
-  }, {});
-
-  const planColors = ['#4f8cff', '#2dd4bf', '#fbbf24', '#fb7185', '#a78bfa'];
-  let currentSlice = 0;
-  const planEntries = Object.entries(planCounts).map(([plan, count], index) => {
-    const percentage = totalMembers > 0 ? Math.round((count / totalMembers) * 100) : 0;
-    const start = currentSlice;
-    currentSlice += percentage;
-    return {
-      plan,
-      count,
-      percentage,
-      color: planColors[index % planColors.length],
-      slice: `${planColors[index % planColors.length]} ${start}% ${currentSlice}%`
-    };
-  });
-
-  const donutStyle = planEntries.length
-    ? { background: `conic-gradient(${planEntries.map((entry) => entry.slice).join(', ')})` }
-    : { background: '#1e293b' };
 
   const metricCards = [
     { label: 'Monthly revenue', value: formatPHP(monthlyRevenue), sub: 'Paid payments this month', icon: DollarSign },
@@ -94,7 +67,7 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
   ];
 
   const recentPaidPayments = payments
-    .filter((payment) => payment.status === 'paid')
+    .filter((payment) => getDerivedPaymentStatus(payment, todayISO) === 'paid')
     .sort((a, b) => new Date(b.paidISO || b.createdAt || 0) - new Date(a.paidISO || a.createdAt || 0))
     .slice(0, 5);
 
@@ -151,13 +124,13 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
           <div className="ops-panel-header">
             <div>
               <h2>Renewal Watchlist</h2>
-              <p>Expired members and renewals due within 14 days.</p>
+              <p>Showing {visibleWatchlistItems.length} of {watchlistItems.length} expired or upcoming renewals.</p>
             </div>
             <button type="button" className="text-action" onClick={() => setActivePage('members')}>View members</button>
           </div>
 
           <div className="watchlist-stack">
-            {[...expiredMembers.slice(0, 3), ...upcomingRenewals.slice(0, 5)].slice(0, 6).map((member) => {
+            {visibleWatchlistItems.map((member) => {
               const isExpired = member.due.days < 0;
               return (
                 <div key={`${member.id}-${member.due.days}`} className="watchlist-row">
@@ -171,7 +144,7 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
                 </div>
               );
             })}
-            {expiredMembers.length + upcomingRenewals.length === 0 && (
+            {watchlistItems.length === 0 && (
               <div className="empty-inline">No expired members or near-term renewals.</div>
             )}
           </div>
@@ -187,7 +160,9 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
           </div>
 
           <div className="payment-queue">
-            {pendingPaymentItems.slice(0, 6).map((payment) => (
+            {pendingPaymentItems.slice(0, 6).map((payment) => {
+              const paymentStatus = getDerivedPaymentStatus(payment, todayISO);
+              return (
               <div key={payment.id} className="queue-row">
                 <div>
                   <strong>{payment.member}</strong>
@@ -195,46 +170,16 @@ export default function DashboardPage({ setActivePage, setOpenAddMemberOnLoad, s
                 </div>
                 <div className="queue-amount">
                   <strong>{formatPHP(payment.amount)}</strong>
-                  <span className={`status-badge ${payment.status === 'overdue' ? 'status-inactive' : 'status-pending'}`}>
-                    {payment.status}
+                  <span className={`status-badge ${paymentStatus === 'overdue' ? 'status-inactive' : 'status-pending'}`}>
+                    {paymentStatus}
                   </span>
                 </div>
               </div>
-            ))}
+              );
+            })}
             {pendingPaymentItems.length === 0 && (
               <div className="empty-inline">No pending payments right now.</div>
             )}
-          </div>
-        </div>
-
-        <div className="ops-panel plan-panel">
-          <div className="ops-panel-header">
-            <div>
-              <h2>Plan Mix</h2>
-              <p>Membership distribution across active records.</p>
-            </div>
-          </div>
-          <div className="dashboard-plan-mix">
-            <div className="donut-chart dashboard-donut" style={donutStyle}>
-              <span>
-                {totalMembers}
-                <small>members</small>
-              </span>
-            </div>
-            <div className="plan-list">
-              {planEntries.length === 0 ? (
-                <div className="empty-inline">No membership plans recorded yet.</div>
-              ) : (
-                planEntries.map((entry) => (
-                  <div key={entry.plan} className="plan-row">
-                    <span className="legend-dot" style={{ background: entry.color }}></span>
-                    <strong>{entry.plan}</strong>
-                    <small>{entry.count} members</small>
-                    <b>{entry.percentage}%</b>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         </div>
 

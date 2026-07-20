@@ -108,6 +108,7 @@ router.post('/', async (req, res) => {
           paymentMethod: payment.method,
           lastPayment: `${payment.amount} on ${payment.paid}`,
           paymentStatus: 'Paid',
+          status: 'active',
           nextPaymentDue: payment.coverageEnd
         },
         { new: true }
@@ -126,6 +127,9 @@ router.put('/:id', async (req, res) => {
     const payload = validatePaymentPayload(req.body, { partial: true });
     const existingPayment = await Payment.findOne({ id: paymentId }).lean();
     if (!existingPayment) return res.status(404).json({ error: 'Payment not found' });
+    if (existingPayment.status === 'paid') {
+      return res.status(409).json({ error: 'Paid payments cannot be edited. Create a correction record instead.' });
+    }
     const requestedMemberId = payload.memberId ?? existingPayment.memberId;
     const member = await Member.findOne({ id: Number(requestedMemberId) }).lean();
     if (!member) {
@@ -151,6 +155,7 @@ router.put('/:id', async (req, res) => {
           paymentMethod: payment.method,
           lastPayment: `${payment.amount} on ${payment.paid}`,
           paymentStatus: 'Paid',
+          status: 'active',
           nextPaymentDue: payment.coverageEnd
         },
         { new: true }

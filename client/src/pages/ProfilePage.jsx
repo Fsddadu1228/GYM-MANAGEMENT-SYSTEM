@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { notify } from '../utils/toast';
 import { formatDisplayDate, formatPHP } from '../utils/formatters';
+import { getDerivedMemberStatus, getDerivedMemberStatusLabel } from '../utils/memberStatus';
+import { getDerivedPaymentStatus, hasUnresolvedOverduePayment } from '../utils/paymentStatus';
 
 export default function ProfilePage({ memberId, setActivePage }) {
   const { members, payments, updateMember, deleteMember, isAdmin } = useContext(GymContext);
@@ -25,6 +27,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
 
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [visiblePaymentCount, setVisiblePaymentCount] = useState(5);
 
   const [name, setName] = useState(member?.name || '');
   const [email, setEmail] = useState(member?.email || '');
@@ -68,6 +71,13 @@ export default function ProfilePage({ memberId, setActivePage }) {
     return value.charAt(0).toUpperCase() + value.slice(1);
   };
 
+  const getPaymentStatusClass = (value) => {
+    const normalizedStatus = String(value || 'pending').toLowerCase();
+    if (normalizedStatus === 'paid') return 'status-paid';
+    if (normalizedStatus === 'overdue') return 'status-badge status-inactive';
+    return 'status-badge status-pending';
+  };
+
   const getInitials = (value) => {
     return (value || '')
       .split(' ')
@@ -90,7 +100,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
 
   const getRenewalLabel = (days) => {
     if (days === null) return 'No renewal date';
-    if (days < 0) return `${Math.abs(days)} days overdue`;
+    if (days < 0) return `Expired ${Math.abs(days)} days ago`;
     if (days === 0) return 'Due today';
     if (days === 1) return 'Due tomorrow';
     return `${days} days remaining`;
@@ -104,11 +114,17 @@ export default function ProfilePage({ memberId, setActivePage }) {
       return bDate - aDate;
     });
 
-  const latestPayment = memberPayments.find((payment) => payment.status === 'paid') || memberPayments[0];
+  const latestPayment = memberPayments.find((payment) => getDerivedPaymentStatus(payment) === 'paid') || memberPayments[0];
+  const visibleMemberPayments = memberPayments.slice(0, visiblePaymentCount);
   const joinedDateStr = formatLongDate(member.joined);
   const renewalDays = getDaysUntilRenewal(member.nextPaymentDue);
   const renewalTone = renewalDays === null ? 'neutral' : renewalDays < 0 ? 'danger' : renewalDays <= 7 ? 'warning' : 'good';
   const memberIdStr = `MEM-${String(member.id).padStart(3, '0')}`;
+  const derivedStatus = getDerivedMemberStatus(member);
+  const derivedStatusLabel = getDerivedMemberStatusLabel(member);
+  const isMembershipExpired = derivedStatus === 'inactive' && renewalDays !== null && renewalDays < 0;
+  const memberHasUnresolvedOverdue = hasUnresolvedOverduePayment(member.id, payments);
+  const latestPaymentStatus = latestPayment ? getDerivedPaymentStatus(latestPayment) : '';
 
   const triggerEditModal = () => {
     setName(member.name || '');
@@ -117,7 +133,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
     setDob(member.dob || '');
     setAddress(member.address || '');
     setPlan(member.plan || '');
-    setStatus(member.status || 'active');
+    setStatus(memberHasUnresolvedOverdue ? 'inactive' : member.status || 'active');
     setEmergencyName(member.emergencyName || '');
     setEmergencyRelation(member.emergencyRelation || '');
     setEmergencyPhone(member.emergencyPhone || '');
@@ -128,6 +144,11 @@ export default function ProfilePage({ memberId, setActivePage }) {
     e.preventDefault();
     if (!name || !email || !phone || !plan) {
       notify('Please fill out all required fields.', 'error');
+      return;
+    }
+
+    if (status === 'active' && memberHasUnresolvedOverdue) {
+      notify('This member has an unresolved overdue payment. Record a new payment before activating the membership.', 'error');
       return;
     }
 
@@ -202,27 +223,18 @@ export default function ProfilePage({ memberId, setActivePage }) {
             <h2>{member.name}</h2>
             <p className="profile-member-id">{memberIdStr}</p>
             <div className="profile-status-badge member-profile-badges">
-              <span className={`status-badge status-${member.status}`}>{formatStatus(member.status)}</span>
+              <span className={`status-badge status-${derivedStatus}`}>{derivedStatusLabel}</span>
               <span className={`renewal-pill renewal-${renewalTone}`}>
                 <Clock size={14} />
                 {getRenewalLabel(renewalDays)}
               </span>
             </div>
           </div>
-          <div className="profile-hero-meta">
-            <span>Current plan</span>
-            <strong>{member.plan}</strong>
-            <small>{member.fee ? formatPHP(member.fee) : 'No fee set'}</small>
-          </div>
         </div>
 
         <section className="profile-stats-grid">
           <div className="stat-card stat-card-compact">
-            <h4>Membership Plan</h4>
-            <p className="stat-value">{member.plan}</p>
-          </div>
-          <div className="stat-card stat-card-compact">
-            <h4>Renewal Date</h4>
+            <h4>{isMembershipExpired ? 'Expired Date' : 'Renewal Date'}</h4>
             <p className="stat-value">{formatLongDate(member.nextPaymentDue)}</p>
           </div>
           <div className="stat-card stat-card-compact">
@@ -271,12 +283,22 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 </div>
                 <div className="history-item">
                   <span className="history-date">{formatLongDate(member.nextPaymentDue)}</span>
-                  <span className="history-event">Next renewal - {getRenewalLabel(renewalDays)}</span>
+                  <span className="history-event">
+                    {isMembershipExpired
+                      ? `Membership expired on ${formatLongDate(member.nextPaymentDue)} (${Math.abs(renewalDays)} days ago)`
+                      : `Next renewal - ${getRenewalLabel(renewalDays)}`}
+                  </span>
                 </div>
                 <div className="history-item">
-                  <span className="history-date">{latestPayment ? formatLongDate(latestPayment.paidISO) : 'No payment'}</span>
+                  <span className="history-date">
+                    {latestPaymentStatus === 'paid' ? formatLongDate(latestPayment?.paidISO) : formatLongDate(latestPayment?.coverageEnd || latestPayment?.due)}
+                  </span>
                   <span className="history-event">
-                    {latestPayment ? `Latest payment ${formatPHP(latestPayment.amount)} (${formatStatus(latestPayment.status)})` : 'No payment history yet'}
+                    {latestPayment
+                      ? latestPaymentStatus === 'paid'
+                        ? `Latest payment ${formatPHP(latestPayment.amount)} (Paid)`
+                        : `Outstanding invoice ${formatPHP(latestPayment.amount)} (${formatStatus(latestPaymentStatus)})`
+                      : 'No payment history yet'}
                   </span>
                 </div>
               </div>
@@ -285,10 +307,31 @@ export default function ProfilePage({ memberId, setActivePage }) {
 
           <div className="profile-column">
             <div className="profile-card">
-              <h3><CreditCard size={18} /> Membership & Renewal</h3>
+              <h3><Shield size={18} /> Emergency Contact</h3>
+              <div className="emergency-contact emergency-contact-priority">
+                <div className="contact-item">
+                  <label>Name</label>
+                  <p>{member.emergencyName || 'Not recorded'}</p>
+                </div>
+                <div className="contact-item">
+                  <label>Relationship</label>
+                  <p>{member.emergencyRelation || 'Not recorded'}</p>
+                </div>
+                <div className="contact-item">
+                  <label>Phone</label>
+                  <p>{member.emergencyPhone || 'Not recorded'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="profile-card">
+              <div className="profile-card-heading membership-card-heading">
+                <h3><CreditCard size={18} /> Membership & Renewal</h3>
+                <span className="membership-plan-badge">{member.plan}</span>
+              </div>
               <div className="membership-summary">
                 <div className={`renewal-summary renewal-${renewalTone}`}>
-                  <span>Renewal status</span>
+                  <span>{isMembershipExpired ? 'Membership status' : 'Renewal status'}</span>
                   <strong>{getRenewalLabel(renewalDays)}</strong>
                   <small>{formatLongDate(member.nextPaymentDue)}</small>
                 </div>
@@ -297,40 +340,14 @@ export default function ProfilePage({ memberId, setActivePage }) {
                   <strong>{memberIdStr}</strong>
                 </div>
                 <div className="info-row">
-                  <span>Plan Type</span>
-                  <strong>{member.plan}</strong>
-                </div>
-                <div className="info-row">
                   <span>Membership Fee</span>
                   <strong>{member.fee ? formatPHP(member.fee) : 'Not set'}</strong>
                 </div>
                 <div className="info-row">
                   <span>Payment Status</span>
-                  <strong className={member.paymentStatus?.toLowerCase() === 'paid' ? 'status-paid' : 'status-badge status-pending'}>
+                  <strong className={getPaymentStatusClass(member.paymentStatus)}>
                     {member.paymentStatus || 'Pending'}
                   </strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="profile-card">
-              <h3>Attendance Stats</h3>
-              <div className="stats-list">
-                <div className="stat-row">
-                  <span>Visits This Month</span>
-                  <strong>{member.visitThisMonth !== undefined ? member.visitThisMonth : 0}</strong>
-                </div>
-                <div className="stat-row">
-                  <span>Total Visits</span>
-                  <strong>{member.totalVisits !== undefined ? member.totalVisits : 0}</strong>
-                </div>
-                <div className="stat-row">
-                  <span>Last Visit</span>
-                  <strong>{member.lastVisit || 'Not recorded'}</strong>
-                </div>
-                <div className="stat-row">
-                  <span>Attendance Rate</span>
-                  <strong>{member.attendanceRate || 'Not recorded'}</strong>
                 </div>
               </div>
             </div>
@@ -352,27 +369,9 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 </div>
                 <div className="info-row">
                   <span>Status</span>
-                  <strong className={latestPayment?.status === 'paid' ? 'status-paid' : 'status-badge status-pending'}>
-                    {formatStatus(latestPayment?.status || member.paymentStatus)}
+                  <strong className={getPaymentStatusClass(latestPaymentStatus || member.paymentStatus)}>
+                    {formatStatus(latestPaymentStatus || member.paymentStatus)}
                   </strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="profile-card">
-              <h3><Shield size={18} /> Emergency Contact</h3>
-              <div className="emergency-contact">
-                <div className="contact-item">
-                  <label>Name</label>
-                  <p>{member.emergencyName || 'Not recorded'}</p>
-                </div>
-                <div className="contact-item">
-                  <label>Relationship</label>
-                  <p>{member.emergencyRelation || 'Not recorded'}</p>
-                </div>
-                <div className="contact-item">
-                  <label>Phone</label>
-                  <p>{member.emergencyPhone || 'Not recorded'}</p>
                 </div>
               </div>
             </div>
@@ -406,25 +405,42 @@ export default function ProfilePage({ memberId, setActivePage }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {memberPayments.map((payment) => (
-                    <tr key={payment.id}>
-                      <td>{payment.invoice || 'No invoice'}</td>
-                      <td>{payment.plan}</td>
-                      <td>{formatPHP(payment.amount)}</td>
-                      <td>{formatCycle(payment.billingCycle)}</td>
-                      <td>{formatMethod(payment.method)}</td>
-                      <td>{payment.paidISO ? formatLongDate(payment.paidISO) : payment.paid || 'Not recorded'}</td>
-                      <td>{payment.coverageEnd ? formatLongDate(payment.coverageEnd) : payment.due || 'Not recorded'}</td>
-                      <td>
-                        <span className={`status-badge ${payment.status === 'paid' ? 'status-active' : payment.status === 'overdue' ? 'status-inactive' : 'status-pending'}`}>
-                          {formatStatus(payment.status)}
-                        </span>
-                      </td>
-                      <td>{payment.notes || 'No notes'}</td>
-                    </tr>
-                  ))}
+                  {visibleMemberPayments.map((payment) => {
+                    const paymentStatus = getDerivedPaymentStatus(payment);
+                    return (
+                      <tr key={payment.id}>
+                        <td data-label="Invoice">{payment.invoice || 'No invoice'}</td>
+                        <td data-label="Plan">{payment.plan}</td>
+                        <td data-label="Amount">{formatPHP(payment.amount)}</td>
+                        <td data-label="Cycle">{formatCycle(payment.billingCycle)}</td>
+                        <td data-label="Method">{formatMethod(payment.method)}</td>
+                        <td data-label="Paid Date">{payment.paidISO ? formatLongDate(payment.paidISO) : payment.paid || 'Not recorded'}</td>
+                        <td data-label="Expiry Date">{payment.coverageEnd ? formatLongDate(payment.coverageEnd) : payment.due || 'Not recorded'}</td>
+                        <td data-label="Status">
+                          <span className={`status-badge ${paymentStatus === 'paid' ? 'status-active' : paymentStatus === 'overdue' ? 'status-inactive' : 'status-pending'}`}>
+                            {formatStatus(paymentStatus)}
+                          </span>
+                        </td>
+                        <td data-label="Notes">{payment.notes || 'No notes'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+            </div>
+          )}
+          {memberPayments.length > 0 && (
+            <div className="profile-history-footer">
+              <span>Showing {Math.min(visiblePaymentCount, memberPayments.length)} of {memberPayments.length} payments</span>
+              {visiblePaymentCount < memberPayments.length && (
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => setVisiblePaymentCount((count) => count + 5)}
+                >
+                  Load 5 more
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -473,10 +489,13 @@ export default function ProfilePage({ memberId, setActivePage }) {
                 <label>
                   <span>Status</span>
                   <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                    <option value="active">Active</option>
+                    <option value="active" disabled={memberHasUnresolvedOverdue}>Active</option>
                     <option value="pending">Pending</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                  {memberHasUnresolvedOverdue && (
+                    <small className="field-help field-help-danger">Record a new payment to reactivate this member.</small>
+                  )}
                 </label>
                 <label>
                   <span>Emergency Name</span>
@@ -510,7 +529,7 @@ export default function ProfilePage({ memberId, setActivePage }) {
           <div className="modal-card confirm-card">
             <h3>Delete Member?</h3>
             <p>
-              This action cannot be undone. All member profile data for <strong>{member.name}</strong> will be permanently removed.
+              <strong>{member.name}</strong> will be permanently removed from member records. Existing payment history will be retained for reports.
             </p>
             <div className="modal-actions" style={{ justifyContent: 'center' }}>
               <button type="button" onClick={() => setIsDeleteOpen(false)} className="secondary-btn">

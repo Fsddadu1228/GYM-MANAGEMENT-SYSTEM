@@ -3,6 +3,7 @@ const Member = require('../models/Member');
 const Payment = require('../models/Payment');
 const { requireRole } = require('../middleware/auth');
 const { validateMemberPayload } = require('../utils/validation');
+const { hasUnresolvedOverduePayment } = require('../utils/statusSync');
 
 const router = express.Router();
 
@@ -42,9 +43,14 @@ router.put('/', requireRole('admin'), async (req, res) => {
       return res.status(400).json({ error: 'Member ids must be unique' });
     }
 
+    const enforcedMembers = await Promise.all(sanitizedMembers.map(async (member) => {
+      if (member.status !== 'active' || !await hasUnresolvedOverduePayment(member.id)) return member;
+      return { ...member, status: 'inactive', paymentStatus: 'Overdue' };
+    }));
+
     if (members.length > 0) {
       await Member.bulkWrite(
-        sanitizedMembers.map((member) => ({
+        enforcedMembers.map((member) => ({
           updateOne: {
             filter: { id: member.id },
             update: { $set: member },
@@ -91,6 +97,11 @@ router.put('/:id', async (req, res) => {
     const payload = validateMemberPayload(req.body, { partial: true });
     const existingMember = await Member.findOne({ id: memberId }).lean();
     if (!existingMember) return res.status(404).json({ error: 'Member not found' });
+
+    if (payload.status === 'active' && await hasUnresolvedOverduePayment(memberId)) {
+      payload.status = 'inactive';
+      payload.paymentStatus = 'Overdue';
+    }
 
     const member = await Member.findOneAndUpdate(
       { id: memberId },

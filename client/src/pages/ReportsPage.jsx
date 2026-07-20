@@ -2,6 +2,8 @@ import React, { useContext, useState } from 'react';
 import { Activity, AlertTriangle, CreditCard, Download, PieChart, Printer, TrendingUp, Users } from 'lucide-react';
 import { GymContext } from '../context/GymContextObject';
 import { formatDisplayDate, formatPHP, parseCurrencyAmount, toLocalISODate } from '../utils/formatters';
+import { getDerivedMemberStatus, getDerivedMemberStatusLabel, isExpiredMember } from '../utils/memberStatus';
+import { getDerivedPaymentStatus } from '../utils/paymentStatus';
 
 export default function ReportsPage() {
   const { members, payments } = useContext(GymContext);
@@ -39,28 +41,30 @@ export default function ReportsPage() {
   const paymentsInDateRange = payments.filter((payment) => {
     if (!dateInRange(getPaymentDate(payment))) return false;
     if (planVal !== 'all' && normalizePlan(payment.plan) !== planVal) return false;
-    if (paymentStatusVal !== 'all' && normalize(payment.status) !== paymentStatusVal) return false;
+    if (paymentStatusVal !== 'all' && getDerivedPaymentStatus(payment, todayISO) !== paymentStatusVal) return false;
     return true;
   });
 
   const reportMembers = members.filter((member) => {
+    const derivedStatus = getDerivedMemberStatus(member, todayISO);
     if (planVal !== 'all' && normalizePlan(member.plan) !== planVal) return false;
-    if (memberStatusVal !== 'all' && normalize(member.status) !== memberStatusVal) return false;
+    if (memberStatusVal !== 'all' && derivedStatus !== memberStatusVal) return false;
     return true;
   });
 
-  const paidPayments = paymentsInDateRange.filter((payment) => payment.status === 'paid');
+  const paidPayments = paymentsInDateRange.filter((payment) => getDerivedPaymentStatus(payment, todayISO) === 'paid');
   const totalRevenue = paidPayments.reduce((sum, payment) => sum + parseCurrencyAmount(payment.amount), 0);
-  const pendingPayments = paymentsInDateRange.filter((payment) => payment.status === 'pending').length;
-  const overduePayments = paymentsInDateRange.filter((payment) => payment.status === 'overdue').length;
+  const pendingPayments = paymentsInDateRange.filter((payment) => getDerivedPaymentStatus(payment, todayISO) === 'pending').length;
+  const overduePayments = paymentsInDateRange.filter((payment) => getDerivedPaymentStatus(payment, todayISO) === 'overdue').length;
   const paymentCount = paymentsInDateRange.length;
   const paidPaymentCount = paidPayments.length;
   const collectionRate = paymentCount > 0 ? Math.round((paidPaymentCount / paymentCount) * 100) : 0;
   const averagePaidPayment = paidPaymentCount > 0 ? totalRevenue / paidPaymentCount : 0;
-  const activeMembers = reportMembers.filter((member) => member.status === 'active').length;
-  const inactiveMembers = reportMembers.filter((member) => member.status !== 'active').length;
+  const activeReportMembers = reportMembers.filter((member) => getDerivedMemberStatus(member, todayISO) === 'active');
+  const activeMembers = activeReportMembers.length;
+  const inactiveMembers = reportMembers.filter((member) => getDerivedMemberStatus(member, todayISO) !== 'active').length;
   const expiredMembers = reportMembers
-    .filter((member) => member.nextPaymentDue && member.nextPaymentDue < todayISO && dateInRange(member.nextPaymentDue))
+    .filter((member) => isExpiredMember(member, todayISO) && dateInRange(member.nextPaymentDue))
     .sort((a, b) => String(a.nextPaymentDue).localeCompare(String(b.nextPaymentDue)));
 
   const monthBuckets = (() => {
@@ -105,7 +109,7 @@ export default function ReportsPage() {
 
   const paymentsByMethod = Object.entries(methodLabels).map(([method, label]) => {
     const methodPayments = paymentsInDateRange.filter((payment) => normalizeMethod(payment.method) === method);
-    const paidMethodPayments = methodPayments.filter((payment) => payment.status === 'paid');
+    const paidMethodPayments = methodPayments.filter((payment) => getDerivedPaymentStatus(payment, todayISO) === 'paid');
     return {
       method,
       label,
@@ -124,12 +128,12 @@ export default function ReportsPage() {
     : { background: '#1e293b' };
   const planColors = ['#4f8cff', '#2dd4bf', '#fbbf24', '#fb7185'];
   let planCursor = 0;
-  const planBreakdown = Object.entries(reportMembers.reduce((acc, member) => {
+  const planBreakdown = Object.entries(activeReportMembers.reduce((acc, member) => {
     const plan = member.plan || 'Full Month';
     acc[plan] = (acc[plan] || 0) + 1;
     return acc;
   }, {})).map(([plan, count], index) => {
-    const percentage = totalScopedMembers > 0 ? Math.round((count / totalScopedMembers) * 100) : 0;
+    const percentage = activeMembers > 0 ? Math.round((count / activeMembers) * 100) : 0;
     const start = planCursor;
     planCursor += percentage;
     return {
@@ -217,11 +221,11 @@ export default function ReportsPage() {
       ['Payments by method', 'Method', 'Payments', 'Paid revenue'],
       ...paymentsByMethod.map((item) => ['Payments by method', item.label, item.count, formatPHP(item.revenue)]),
       [],
-      ['Plan mix', 'Plan', 'Members', 'Share'],
-      ...planBreakdown.map((item) => ['Plan mix', item.plan, item.count, `${item.percentage}%`]),
+      ['Active membership mix', 'Plan', 'Members', 'Share'],
+      ...planBreakdown.map((item) => ['Active membership mix', item.plan, item.count, `${item.percentage}%`]),
       [],
       ['Expired memberships', 'Member', 'Plan', 'Renewal date', 'Status'],
-      ...expiredMembers.map((member) => ['Expired memberships', member.name, member.plan, formatDisplayDate(member.nextPaymentDue), member.status])
+      ...expiredMembers.map((member) => ['Expired memberships', member.name, member.plan, formatDisplayDate(member.nextPaymentDue), getDerivedMemberStatusLabel(member, todayISO)])
     ];
 
     const csv = summaryRows.map((row) => row.map(csvCell).join(',')).join('\n');
@@ -236,7 +240,7 @@ export default function ReportsPage() {
       <tr><td>${escapeHtml(item.label)}</td><td>${item.count}</td><td>${escapeHtml(formatPHP(item.revenue))}</td></tr>
     `).join('');
     const expiredRows = expiredMembers.map((member) => `
-      <tr><td>${escapeHtml(member.name)}</td><td>${escapeHtml(member.plan)}</td><td>${escapeHtml(formatDisplayDate(member.nextPaymentDue))}</td><td>${escapeHtml(member.status)}</td></tr>
+      <tr><td>${escapeHtml(member.name)}</td><td>${escapeHtml(member.plan)}</td><td>${escapeHtml(formatDisplayDate(member.nextPaymentDue))}</td><td>${escapeHtml(getDerivedMemberStatusLabel(member, todayISO))}</td></tr>
     `).join('');
 
     const printWindow = window.open('', '_blank');
@@ -498,15 +502,15 @@ export default function ReportsPage() {
         <article className="chart-card report-chart-card">
           <div className="chart-card-header">
             <div>
-              <h3>Plan Mix</h3>
-              <p>Members grouped by current membership type.</p>
+              <h3>Active Membership Mix</h3>
+              <p>Current active members grouped by membership type.</p>
             </div>
           </div>
           <div className="report-plan-layout">
             <div className="donut-chart report-plan-donut" style={planDonutStyle}>
               <span>
-                {totalScopedMembers}
-                <small>members</small>
+                {activeMembers}
+                <small>active</small>
               </span>
             </div>
             <div className="report-plan-list">
@@ -517,7 +521,7 @@ export default function ReportsPage() {
                   <div key={item.plan} className="report-plan-row">
                     <span className="legend-dot" style={{ background: item.color }}></span>
                     <strong>{item.plan}</strong>
-                    <small>{item.count} members</small>
+                    <small>{item.count} {item.count === 1 ? 'member' : 'members'}</small>
                     <b>{item.percentage}%</b>
                   </div>
                 ))
@@ -561,8 +565,8 @@ export default function ReportsPage() {
                       <td>{member.plan}</td>
                       <td>{formatDisplayDate(member.nextPaymentDue)}</td>
                       <td>
-                        <span className={`status-badge status-${member.status}`}>
-                          {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
+                        <span className={`status-badge status-${getDerivedMemberStatus(member, todayISO)}`}>
+                          {getDerivedMemberStatusLabel(member, todayISO)}
                         </span>
                       </td>
                       <td>{member.lastPayment || 'Not recorded'}</td>

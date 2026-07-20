@@ -3,6 +3,7 @@ import { GymContext } from '../context/GymContextObject';
 import { Banknote, CircleAlert, Clock3, Download, Printer, ReceiptText, Search, Trash2, WalletCards, X } from 'lucide-react';
 import { notify } from '../utils/toast';
 import { formatDisplayDate, formatPHP, parseCurrencyAmount, toLocalISODate } from '../utils/formatters';
+import { getDerivedPaymentStatus } from '../utils/paymentStatus';
 
 export default function PaymentsPage({
   openRecordModalOnLoad,
@@ -39,16 +40,17 @@ export default function PaymentsPage({
 
   // KPI Calculations
   const totalRevenue = payments
-    .filter((p) => p.status === 'paid')
+    .filter((p) => getDerivedPaymentStatus(p) === 'paid')
     .reduce((sum, p) => sum + parseCurrencyAmount(p.amount), 0);
 
   const todayISO = toLocalISODate();
+  const viewingPaymentStatus = viewingPayment ? getDerivedPaymentStatus(viewingPayment, todayISO) : '';
   const paidToday = payments
-    .filter((p) => p.status === 'paid' && p.paidISO === todayISO)
+    .filter((p) => getDerivedPaymentStatus(p, todayISO) === 'paid' && p.paidISO === todayISO)
     .reduce((sum, p) => sum + parseCurrencyAmount(p.amount), 0);
 
-  const pendingCount = payments.filter((p) => p.status === 'pending').length;
-  const overdueCount = payments.filter((p) => p.status === 'overdue').length;
+  const pendingCount = payments.filter((p) => getDerivedPaymentStatus(p, todayISO) === 'pending').length;
+  const overdueCount = payments.filter((p) => getDerivedPaymentStatus(p, todayISO) === 'overdue').length;
   const planOptions = [...new Set(payments.map((p) => p.plan).filter(Boolean))].sort();
 
   const compareValues = (a, b) => {
@@ -65,7 +67,7 @@ export default function PaymentsPage({
     const linkedMember = members.find((member) => member.id === p.memberId);
     const displayName = linkedMember?.name || p.member || '';
     const matchesSearch = !searchTerm || displayName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus === 'all' || p.status === selectedStatus;
+    const matchesStatus = selectedStatus === 'all' || getDerivedPaymentStatus(p, todayISO) === selectedStatus;
     const matchesMethod = selectedMethod === 'all' || normalizePaymentMethod(p.method) === selectedMethod;
     const matchesPlan = selectedPlan === 'all' || p.plan === selectedPlan;
     return matchesSearch && matchesStatus && matchesMethod && matchesPlan;
@@ -82,7 +84,7 @@ export default function PaymentsPage({
       case 'renewal-soon':
         return compareValues(new Date(a.coverageEnd || '9999-12-31').getTime(), new Date(b.coverageEnd || '9999-12-31').getTime());
       case 'status':
-        return compareValues(a.status, b.status);
+        return compareValues(getDerivedPaymentStatus(a, todayISO), getDerivedPaymentStatus(b, todayISO));
       case 'paid-newest':
       default:
         return compareValues(new Date(b.paidISO || b.createdAt || 0).getTime(), new Date(a.paidISO || a.createdAt || 0).getTime());
@@ -128,6 +130,10 @@ export default function PaymentsPage({
   }, [members, selectedMemberId]);
 
   const triggerEditModal = (payment) => {
+    if (getDerivedPaymentStatus(payment, todayISO) === 'paid') {
+      notify('Paid invoices are locked. Create a correction record instead of editing the original payment.', 'error');
+      return;
+    }
     setRecordMode('edit');
     setEditingPayment(payment);
     const linkedMember = members.find((m) => m.id === payment.memberId) || members.find((m) => m.name === payment.member);
@@ -229,7 +235,7 @@ export default function PaymentsPage({
       payment.plan,
       formatPHP(payment.amount),
       formatMethod(payment.method),
-      payment.status,
+      getDerivedPaymentStatus(payment, todayISO),
       formatDisplayDate(payment.paidISO, payment.paid || ''),
       formatDisplayDate(payment.coverageEnd, payment.due || ''),
       payment.ref,
@@ -248,7 +254,7 @@ export default function PaymentsPage({
         <td>${escapeHtml(payment.plan)}</td>
         <td>${escapeHtml(formatPHP(payment.amount))}</td>
         <td>${escapeHtml(formatMethod(payment.method))}</td>
-        <td>${escapeHtml(payment.status)}</td>
+        <td>${escapeHtml(getDerivedPaymentStatus(payment, todayISO))}</td>
         <td>${escapeHtml(formatDisplayDate(payment.paidISO, payment.paid || ''))}</td>
         <td>${escapeHtml(formatDisplayDate(payment.coverageEnd, payment.due || ''))}</td>
       </tr>
@@ -314,6 +320,8 @@ export default function PaymentsPage({
   const getReceiptHtml = (payment, shouldAutoPrint = false) => {
     const paidDate = formatDisplayDate(payment.paidISO, payment.paid || 'Not recorded');
     const renewalDate = formatDisplayDate(payment.coverageEnd, payment.due || 'Not recorded');
+    const paymentStatus = getDerivedPaymentStatus(payment, todayISO);
+    const isPaid = paymentStatus === 'paid';
 
     return `
       <!doctype html>
@@ -350,16 +358,16 @@ export default function PaymentsPage({
           <section class="header">
             <div class="brand">
               <h1>FitnessGym</h1>
-              <p>Official Payment Receipt</p>
+              <p>${isPaid ? 'Official Payment Receipt' : 'Membership Invoice'}</p>
             </div>
             <div class="meta">
               <strong>${escapeHtml(payment.invoice || 'No invoice')}</strong>
               <p>${escapeHtml(paidDate)}</p>
-              <span class="status">${escapeHtml((payment.status || 'paid').toUpperCase())}</span>
+              <span class="status">${escapeHtml(paymentStatus.toUpperCase())}</span>
             </div>
           </section>
           <section class="amount">
-            <span>Amount Paid</span>
+            <span>${isPaid ? 'Amount Paid' : 'Amount Due'}</span>
             <strong>${escapeHtml(formatPHP(payment.amount))}</strong>
           </section>
           <section>
@@ -382,6 +390,12 @@ export default function PaymentsPage({
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+
+    if (recordMode === 'edit' && editingPayment && getDerivedPaymentStatus(editingPayment, todayISO) === 'paid') {
+      notify('Paid invoices cannot be edited.', 'error');
+      setIsRecordOpen(false);
+      return;
+    }
 
     const amtNum = Number(amount);
     if (Number.isNaN(amtNum) || amtNum <= 0) {
@@ -678,24 +692,25 @@ export default function PaymentsPage({
               ) : (
                 paginated.map((p) => {
                   const memberDisplay = getPaymentMemberName(p);
-                  const statusClass = p.status === 'paid' ? 'status-active' : p.status === 'pending' ? 'status-pending' : 'status-inactive';
-                  const statusText = p.status === 'paid' ? 'Paid' : p.status === 'pending' ? 'Pending' : 'Overdue';
+                  const paymentStatus = getDerivedPaymentStatus(p, todayISO);
+                  const statusClass = paymentStatus === 'paid' ? 'status-active' : paymentStatus === 'pending' ? 'status-pending' : 'status-inactive';
+                  const statusText = paymentStatus === 'paid' ? 'Paid' : paymentStatus === 'pending' ? 'Pending' : 'Overdue';
 
                   return (
                     <tr key={p.id} className="payment-row">
-                      <td style={{ fontWeight: 600 }}>
+                      <td data-label="Member" style={{ fontWeight: 600 }}>
                         {memberDisplay}
                         <small className="table-subtext">MEM-{String(p.memberId || '').padStart(3, '0')}</small>
                       </td>
-                      <td>{p.plan}</td>
-                      <td>{formatPHP(p.amount)}</td>
-                      <td>{formatMethod(p.method)}</td>
-                      <td>{formatDisplayDate(p.coverageEnd, p.due || 'Not recorded')}</td>
-                      <td>{formatDisplayDate(p.paidISO, p.paid || 'Not recorded')}</td>
-                      <td>
+                      <td data-label="Plan">{p.plan}</td>
+                      <td data-label="Amount">{formatPHP(p.amount)}</td>
+                      <td data-label="Method">{formatMethod(p.method)}</td>
+                      <td data-label="Renewal Date">{formatDisplayDate(p.coverageEnd, p.due || 'Not recorded')}</td>
+                      <td data-label="Paid Date">{formatDisplayDate(p.paidISO, p.paid || 'Not recorded')}</td>
+                      <td data-label="Status">
                         <span className={`status-badge ${statusClass}`}>{statusText}</span>
                       </td>
-                      <td>
+                      <td data-label="Actions">
                         <div className="action-group">
                           <button
                             onClick={() => triggerDetailsModal(p)}
@@ -708,6 +723,8 @@ export default function PaymentsPage({
                             onClick={() => triggerEditModal(p)}
                             className="action-btn edit-btn"
                             type="button"
+                            disabled={paymentStatus === 'paid'}
+                            title={paymentStatus === 'paid' ? 'Paid invoices are locked' : 'Edit payment'}
                           >
                             Edit
                           </button>
@@ -734,7 +751,7 @@ export default function PaymentsPage({
           <div className="pagination-footer">
             <div className="pagination-info">
               <span>
-                Showing {startIdx + 1}-{endIdx} of {totalMatches} payments
+                Showing {startIdx + 1}-{endIdx} of {totalMatches} payments - Page {activeCurrentPage} of {totalPages}
               </span>
             </div>
             <div className="pagination">{renderPaginationButtons()}</div>
@@ -769,14 +786,17 @@ export default function PaymentsPage({
 
               <label className="form-row">
                 <span>Amount</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  required
-                />
+                <span className="currency-input-wrap">
+                  <span className="currency-input-prefix">PHP</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    required
+                  />
+                </span>
               </label>
 
               <label className="form-row">
@@ -837,8 +857,8 @@ export default function PaymentsPage({
                   <ReceiptText size={20} />
                 </span>
                 <div>
-                  <p>Official receipt</p>
-                  <h2>Payment Receipt</h2>
+                  <p>{viewingPaymentStatus === 'paid' ? 'Official receipt' : 'Membership invoice'}</p>
+                  <h2>{viewingPaymentStatus === 'paid' ? 'Payment Receipt' : 'Invoice Details'}</h2>
                 </div>
               </div>
               <button onClick={closeDetailsModal} className="modal-close receipt-close">
@@ -857,7 +877,7 @@ export default function PaymentsPage({
                   <strong>{getPaymentMemberName(viewingPayment)}</strong>
                 </div>
                 <div className="receipt-summary-amount">
-                  <span>Amount paid</span>
+                  <span>{viewingPaymentStatus === 'paid' ? 'Amount paid' : 'Amount due'}</span>
                   <strong>{formatPHP(viewingPayment.amount)}</strong>
                 </div>
               </section>
@@ -891,8 +911,8 @@ export default function PaymentsPage({
                 </div>
                 <div className="invoice-row">
                   <strong>Status</strong>
-                  <span className={`receipt-status receipt-status-${viewingPayment.status}`}>
-                    {viewingPayment.status.toUpperCase()}
+                  <span className={`receipt-status receipt-status-${viewingPaymentStatus}`}>
+                    {viewingPaymentStatus.toUpperCase()}
                   </span>
                 </div>
                 <div className="invoice-row">

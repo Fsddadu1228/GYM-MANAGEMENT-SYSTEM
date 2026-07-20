@@ -3,6 +3,25 @@ import { GymContext } from '../context/GymContextObject';
 import { Clock3, Download, Printer, Search, UserCheck, Users, UserX, X } from 'lucide-react';
 import { notify } from '../utils/toast';
 import { formatDisplayDate, toLocalISODate } from '../utils/formatters';
+import { getDerivedMemberStatus, getDerivedMemberStatusLabel } from '../utils/memberStatus';
+import { hasUnresolvedOverduePayment } from '../utils/paymentStatus';
+
+const defaultMemberFilters = {
+  search: '',
+  status: 'all',
+  plan: 'all',
+  dateFrom: '',
+  dateTo: ''
+};
+
+function calculateMembershipExpiry(startDate, plan) {
+  if (!startDate) return '';
+  const start = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return '';
+  const durationDays = plan === 'Daily' ? 1 : plan === 'Half Month' ? 15 : 30;
+  start.setDate(start.getDate() + durationDays);
+  return toLocalISODate(start);
+}
 
 export default function MembersPage({
   setActivePage,
@@ -10,19 +29,23 @@ export default function MembersPage({
   openAddModalOnLoad,
   setOpenAddModalOnLoad
 }) {
-  const { members, addMember, updateMember, deleteMember, isAdmin } = useContext(GymContext);
+  const {
+    members,
+    payments,
+    addMember,
+    updateMember,
+    deleteMember,
+    bulkUpdateMemberStatus,
+    bulkDeleteMembers,
+    isAdmin
+  } = useContext(GymContext);
 
   // Filter States
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedPlan, setSelectedPlan] = useState('all');
-  const [selectedRenewal, setSelectedRenewal] = useState('all');
-  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('all');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('all');
-  const [sortBy, setSortBy] = useState('name-asc');
+  const [filters, setFilters] = useState(defaultMemberFilters);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
+  const [bulkAction, setBulkAction] = useState('');
 
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -31,6 +54,7 @@ export default function MembersPage({
 
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState(null);
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
 
   // Form Fields State
   const [name, setName] = useState('');
@@ -43,80 +67,39 @@ export default function MembersPage({
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [dob, setDob] = useState('');
   const [address, setAddress] = useState('');
+  const [startDate, setStartDate] = useState(toLocalISODate());
 
   // Statistics calculation for filtered records
-  const totalCount = members.length;
-  const activeCount = members.filter((m) => m.status === 'active').length;
-  const pendingCount = members.filter((m) => m.status === 'pending').length;
-  const inactiveCount = members.filter((m) => m.status === 'inactive').length;
   const todayISO = toLocalISODate();
+  const visibleMembers = members;
+  const totalCount = visibleMembers.length;
+  const activeCount = visibleMembers.filter((m) => getDerivedMemberStatus(m, todayISO) === 'active').length;
+  const pendingCount = visibleMembers.filter((m) => getDerivedMemberStatus(m, todayISO) === 'pending').length;
+  const inactiveCount = visibleMembers.filter((m) => getDerivedMemberStatus(m, todayISO) === 'inactive').length;
   const planOptions = [...new Set(members.map((m) => m.plan).filter(Boolean))].sort();
-  const paymentMethodOptions = ['Cash', 'GCash'];
-
-  const formatPaymentMethod = (method) => {
-    if (!method) return 'No method';
-    return String(method).toLowerCase() === 'gcash' ? 'GCash' : 'Cash';
-  };
-
-  const isExpired = (member) => {
-    if (!member.nextPaymentDue) return false;
-    const renewalDate = new Date(member.nextPaymentDue);
-    if (Number.isNaN(renewalDate.getTime())) return false;
-    return toLocalISODate(renewalDate) < todayISO;
-  };
-
-  const isDueSoon = (member) => {
-    if (!member.nextPaymentDue || isExpired(member)) return false;
-    const renewalDate = new Date(member.nextPaymentDue);
-    if (Number.isNaN(renewalDate.getTime())) return false;
-    const today = new Date(todayISO);
-    const diffDays = Math.ceil((renewalDate - today) / (1000 * 60 * 60 * 24));
-    return diffDays <= 7;
-  };
 
   const compareValues = (a, b) => {
     if (typeof a === 'number' && typeof b === 'number') return a - b;
     return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
   };
 
-  // Search, filter, and sorting logic
-  const filtered = members.filter((m) => {
+  // Search and filter logic
+  const filtered = visibleMembers.filter((m) => {
+    const searchTerm = filters.search.trim().toLowerCase();
+    const joinedISO = toLocalISODate(m.joined);
+    const derivedStatus = getDerivedMemberStatus(m, todayISO);
     const matchesSearch =
       !searchTerm ||
-      (m.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (m.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (m.phone || '').toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus === 'all' || m.status === selectedStatus;
-    const matchesPlan = selectedPlan === 'all' || m.plan === selectedPlan;
-    const matchesPaymentStatus =
-      selectedPaymentStatus === 'all' ||
-      (selectedPaymentStatus === 'pending' && (m.paymentStatus || '').toLowerCase() !== 'paid') ||
-      (m.paymentStatus || '').toLowerCase() === selectedPaymentStatus;
-    const matchesPaymentMethod = selectedPaymentMethod === 'all' || formatPaymentMethod(m.paymentMethod) === selectedPaymentMethod;
-    const matchesRenewal =
-      selectedRenewal === 'all' ||
-      (selectedRenewal === 'expired' && isExpired(m)) ||
-      (selectedRenewal === 'due-soon' && isDueSoon(m)) ||
-      (selectedRenewal === 'current' && !isExpired(m));
-    return matchesSearch && matchesStatus && matchesPlan && matchesPaymentStatus && matchesPaymentMethod && matchesRenewal;
+      (m.name || '').toLowerCase().includes(searchTerm) ||
+      (m.email || '').toLowerCase().includes(searchTerm) ||
+      (m.phone || '').toLowerCase().includes(searchTerm);
+    const matchesStatus = filters.status === 'all' || derivedStatus === filters.status;
+    const matchesPlan = filters.plan === 'all' || m.plan === filters.plan;
+    const matchesDateFrom = !filters.dateFrom || (joinedISO && joinedISO >= filters.dateFrom);
+    const matchesDateTo = !filters.dateTo || (joinedISO && joinedISO <= filters.dateTo);
+    return matchesSearch && matchesStatus && matchesPlan && matchesDateFrom && matchesDateTo;
   }).sort((a, b) => {
-    switch (sortBy) {
-      case 'name-desc':
-        return compareValues(b.name, a.name);
-      case 'join-newest':
-        return compareValues(new Date(b.joined).getTime(), new Date(a.joined).getTime());
-      case 'join-oldest':
-        return compareValues(new Date(a.joined).getTime(), new Date(b.joined).getTime());
-      case 'renewal-soon':
-        return compareValues(new Date(a.nextPaymentDue || '9999-12-31').getTime(), new Date(b.nextPaymentDue || '9999-12-31').getTime());
-      case 'plan':
-        return compareValues(a.plan, b.plan);
-      case 'status':
-        return compareValues(a.status, b.status);
-      case 'name-asc':
-      default:
-        return compareValues(a.name, b.name);
-    }
+    return compareValues(a.name, b.name);
   });
 
   const totalMatches = filtered.length;
@@ -128,6 +111,22 @@ export default function MembersPage({
   const startIdx = (activeCurrentPage - 1) * pageSize;
   const endIdx = Math.min(startIdx + pageSize, totalMatches);
   const paginated = filtered.slice(startIdx, endIdx);
+  const selectedMembers = members.filter((member) => selectedRowIds.includes(member.id));
+  const editingMemberLocked = Boolean(editingMember && hasUnresolvedOverduePayment(editingMember.id, payments));
+
+  const updateFilter = (key, value) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+    setCurrentPage(1);
+    setSelectedRowIds([]);
+    setBulkAction('');
+  };
+
+  const handleClearFilters = () => {
+    setFilters(defaultMemberFilters);
+    setCurrentPage(1);
+    setSelectedRowIds([]);
+    setBulkAction('');
+  };
 
   const getInitials = (n) => {
     return (n || '')
@@ -149,6 +148,7 @@ export default function MembersPage({
     setAddress('');
     setPlan('Full Month');
     setStatus('active');
+    setStartDate(toLocalISODate());
     setEmergencyName('');
     setEmergencyRelation('');
     setEmergencyPhone('');
@@ -172,7 +172,8 @@ export default function MembersPage({
     setDob(member.dob || '');
     setAddress(member.address || '');
     setPlan(member.plan || '');
-    setStatus(member.status || 'active');
+    setStatus(hasUnresolvedOverduePayment(member.id, payments) ? 'inactive' : member.status || 'active');
+    setStartDate(member.joined || toLocalISODate());
     setEmergencyName(member.emergencyName || '');
     setEmergencyRelation(member.emergencyRelation || '');
     setEmergencyPhone(member.emergencyPhone || '');
@@ -193,6 +194,11 @@ export default function MembersPage({
       return;
     }
 
+    if (modalMode === 'edit' && status === 'active' && editingMemberLocked) {
+      notify('Record a new payment before reactivating this member.', 'error');
+      return;
+    }
+
     const payload = {
       name,
       email,
@@ -201,6 +207,7 @@ export default function MembersPage({
       address,
       plan,
       status,
+      ...(modalMode === 'add' ? { joined: startDate } : {}),
       emergencyName,
       emergencyRelation,
       emergencyPhone
@@ -254,6 +261,62 @@ export default function MembersPage({
     } else {
       setSelectedRowIds([...selectedRowIds, id]);
     }
+  };
+
+  const handleBulkApply = async () => {
+    if (!bulkAction) {
+      notify('Choose a bulk action first.', 'error');
+      return;
+    }
+    if (selectedRowIds.length === 0) {
+      notify('Select at least one member first.', 'error');
+      return;
+    }
+
+    if (bulkAction === 'export') {
+      handleExportSelectedMembersCsv();
+      notify(`Exported ${selectedRowIds.length} selected member${selectedRowIds.length === 1 ? '' : 's'}.`);
+      setBulkAction('');
+      return;
+    }
+
+    if (bulkAction === 'delete') {
+      if (!isAdmin) {
+        notify('Only admins can delete selected members.', 'error');
+        return;
+      }
+      setIsBulkDeleteOpen(true);
+      return;
+    }
+
+    const statusMap = {
+      'mark-active': 'active',
+      'mark-pending': 'pending',
+      'mark-inactive': 'inactive'
+    };
+    const nextStatus = statusMap[bulkAction];
+    if (!nextStatus) return;
+
+    const updated = await bulkUpdateMemberStatus(selectedRowIds, nextStatus);
+    if (updated) {
+      notify(`${selectedRowIds.length} selected member${selectedRowIds.length === 1 ? '' : 's'} updated.`);
+      setSelectedRowIds([]);
+      setBulkAction('');
+    } else {
+      notify('Unable to update selected members. Please try again.', 'error');
+    }
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const deleted = await bulkDeleteMembers(selectedRowIds);
+    if (deleted) {
+      notify(`${selectedRowIds.length} selected member${selectedRowIds.length === 1 ? '' : 's'} deleted.`);
+      setSelectedRowIds([]);
+      setBulkAction('');
+    } else {
+      notify('Unable to delete selected members. Please try again.', 'error');
+    }
+    setIsBulkDeleteOpen(false);
   };
 
   // Pagination buttons
@@ -319,7 +382,7 @@ export default function MembersPage({
     URL.revokeObjectURL(url);
   };
 
-  const handleExportMembersCsv = () => {
+  const buildMembersCsv = (memberList) => {
     const headers = [
       'Member ID',
       'Name',
@@ -328,30 +391,33 @@ export default function MembersPage({
       'Plan',
       'Status',
       'Join Date',
-      'Renewal Date',
-      'Payment Status',
-      'Payment Method',
       'Address',
       'Emergency Contact',
       'Emergency Phone'
     ];
-    const rows = filtered.map((member) => [
+    const rows = memberList.map((member) => [
       `MEM-${String(member.id).padStart(3, '0')}`,
       member.name,
       member.email,
       member.phone,
       member.plan,
-      member.status,
+      getDerivedMemberStatusLabel(member, todayISO),
       formatDisplayDate(member.joined, ''),
-      formatDisplayDate(member.nextPaymentDue, ''),
-      member.paymentStatus,
-      formatPaymentMethod(member.paymentMethod),
       member.address,
       member.emergencyName,
       member.emergencyPhone
     ]);
-    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+    return [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\n');
+  };
+
+  const handleExportMembersCsv = () => {
+    const csv = buildMembersCsv(filtered);
     downloadTextFile(`FitnessGym-members-${todayISO}.csv`, csv);
+  };
+
+  const handleExportSelectedMembersCsv = () => {
+    const csv = buildMembersCsv(selectedMembers);
+    downloadTextFile(`FitnessGym-selected-members-${todayISO}.csv`, csv);
   };
 
   const handlePrintMembersReport = () => {
@@ -361,9 +427,7 @@ export default function MembersPage({
         <td>${escapeHtml(member.name)}</td>
         <td>${escapeHtml(member.email)}</td>
         <td>${escapeHtml(member.plan)}</td>
-        <td>${escapeHtml(member.status)}</td>
-        <td>${escapeHtml(formatDisplayDate(member.nextPaymentDue))}</td>
-        <td>${escapeHtml(member.paymentStatus || 'Pending')}</td>
+        <td>${escapeHtml(getDerivedMemberStatusLabel(member, todayISO))}</td>
       </tr>
     `).join('');
 
@@ -403,10 +467,10 @@ export default function MembersPage({
         <table>
           <thead>
             <tr>
-              <th>ID</th><th>Name</th><th>Email</th><th>Plan</th><th>Status</th><th>Renewal</th><th>Payment</th>
+              <th>ID</th><th>Name</th><th>Email</th><th>Plan</th><th>Status</th>
             </tr>
           </thead>
-          <tbody>${rowsHtml || '<tr><td colspan="7">No members found.</td></tr>'}</tbody>
+          <tbody>${rowsHtml || '<tr><td colspan="5">No members found.</td></tr>'}</tbody>
         </table>
         <script>window.onload = function() { window.print(); }</script>
       </body>
@@ -475,137 +539,111 @@ export default function MembersPage({
         </article>
       </section>
 
+      <section className="member-filter-card" aria-label="Member filters">
+        <div className="member-filter-grid">
+          <div className="toolbar-group">
+            <label htmlFor="statusFilter">Membership Status</label>
+            <select
+              id="statusFilter"
+              value={filters.status}
+              onChange={(e) => updateFilter('status', e.target.value)}
+              className="select-inline"
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="pending">Pending</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div className="toolbar-group">
+            <label htmlFor="planFilter">Membership Type</label>
+            <select
+              id="planFilter"
+              value={filters.plan}
+              onChange={(e) => updateFilter('plan', e.target.value)}
+              className="select-inline"
+            >
+              <option value="all">All types</option>
+              {planOptions.map((planOption) => (
+                <option key={planOption} value={planOption}>{planOption}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="toolbar-group member-date-range" role="group" aria-labelledby="memberDateRangeLabel">
+            <span id="memberDateRangeLabel" className="filter-label">Date Range</span>
+            <div className="date-range-fields">
+              <input
+                id="memberDateFrom"
+                type="date"
+                aria-label="Date range start"
+                value={filters.dateFrom}
+                max={filters.dateTo || undefined}
+                onChange={(e) => updateFilter('dateFrom', e.target.value)}
+                className="select-inline date-inline"
+              />
+              <input
+                id="memberDateTo"
+                type="date"
+                aria-label="Date range end"
+                value={filters.dateTo}
+                min={filters.dateFrom || undefined}
+                onChange={(e) => updateFilter('dateTo', e.target.value)}
+                className="select-inline date-inline"
+              />
+            </div>
+          </div>
+
+          <div className="filter-actions member-filter-actions">
+            <button className="secondary-btn" type="button" onClick={handleClearFilters}>
+              Clear filters
+            </button>
+          </div>
+        </div>
+      </section>
+
       {/* Main Table Panel */}
       <section className="panel">
-        <div className="panel-toolbar-new">
+        <div className="panel-toolbar-new members-table-toolbar">
           <div className="toolbar-left">
             <div className="search-box" style={{ position: 'relative' }}>
               <Search size={16} style={{ position: 'absolute', left: '12px', top: '14px', color: '#64748b' }} />
               <input
                 type="text"
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
+                value={filters.search}
+                onChange={(e) => updateFilter('search', e.target.value)}
                 placeholder="Search by name or email"
                 className="search-input"
                 style={{ paddingLeft: '36px' }}
               />
             </div>
-          </div>
-
-          <div className="toolbar-right">
-            <div className="toolbar-group-inline">
-              <label htmlFor="statusFilter">Status:</label>
+            <div className="bulk-action-bar">
               <select
-                id="statusFilter"
-                value={selectedStatus}
-                onChange={(e) => {
-                  setSelectedStatus(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="select-inline"
+                value={bulkAction}
+                onChange={(e) => setBulkAction(e.target.value)}
+                className="select-inline bulk-action-select"
+                aria-label="Bulk action"
               >
-                <option value="all">All</option>
-                <option value="active">Active</option>
-                <option value="pending">Pending</option>
-                <option value="inactive">Inactive</option>
+                <option value="">Bulk action</option>
+                <option value="mark-active">Mark as Active</option>
+                <option value="mark-pending">Mark as Pending</option>
+                <option value="mark-inactive">Mark as Inactive</option>
+                <option value="export">Export selected CSV</option>
+                {isAdmin && <option value="delete">Delete selected</option>}
               </select>
-            </div>
-
-            <div className="toolbar-group-inline">
-              <label htmlFor="planFilter">Plan:</label>
-              <select
-                id="planFilter"
-                value={selectedPlan}
-                onChange={(e) => {
-                  setSelectedPlan(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="select-inline"
+              <button
+                type="button"
+                className="secondary-btn bulk-action-apply"
+                onClick={handleBulkApply}
+                disabled={!bulkAction || selectedRowIds.length === 0}
               >
-                <option value="all">All</option>
-                {planOptions.map((planOption) => (
-                  <option key={planOption} value={planOption}>{planOption}</option>
-                ))}
-              </select>
+                Apply
+              </button>
+              <span className="bulk-selected-count">
+                {selectedRowIds.length} selected
+              </span>
             </div>
-
-            <div className="toolbar-group-inline">
-              <label htmlFor="renewalFilter">Renewal:</label>
-              <select
-                id="renewalFilter"
-                value={selectedRenewal}
-                onChange={(e) => {
-                  setSelectedRenewal(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="select-inline"
-              >
-                <option value="all">All</option>
-                <option value="expired">Expired</option>
-                <option value="due-soon">Due soon</option>
-                <option value="current">Current</option>
-              </select>
-            </div>
-
-            <div className="toolbar-group-inline">
-              <label htmlFor="memberPaymentFilter">Payment:</label>
-              <select
-                id="memberPaymentFilter"
-                value={selectedPaymentStatus}
-                onChange={(e) => {
-                  setSelectedPaymentStatus(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="select-inline"
-              >
-                <option value="all">All</option>
-                <option value="paid">Paid</option>
-                <option value="pending">Pending</option>
-              </select>
-            </div>
-
-            <div className="toolbar-group-inline">
-              <label htmlFor="memberPaymentMethodFilter">Method:</label>
-              <select
-                id="memberPaymentMethodFilter"
-                value={selectedPaymentMethod}
-                onChange={(e) => {
-                  setSelectedPaymentMethod(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="select-inline"
-              >
-                <option value="all">All</option>
-                {paymentMethodOptions.map((methodOption) => (
-                  <option key={methodOption} value={methodOption}>{methodOption}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="toolbar-group-inline">
-              <label htmlFor="memberSort">Sort:</label>
-              <select
-                id="memberSort"
-                value={sortBy}
-                onChange={(e) => {
-                  setSortBy(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="select-inline"
-              >
-                <option value="name-asc">Name A-Z</option>
-                <option value="name-desc">Name Z-A</option>
-                <option value="renewal-soon">Renewal soonest</option>
-                <option value="join-newest">Newest joined</option>
-                <option value="join-oldest">Oldest joined</option>
-                <option value="plan">Plan</option>
-                <option value="status">Status</option>
-              </select>
-            </div>
-
           </div>
         </div>
 
@@ -626,8 +664,6 @@ export default function MembersPage({
                 <th scope="col">Email</th>
                 <th scope="col">Membership ID</th>
                 <th scope="col">Membership Type</th>
-                <th scope="col">Renewal</th>
-                <th scope="col">Payment</th>
                 <th scope="col">Join Date</th>
                 <th scope="col">Status</th>
                 <th scope="col">Actions</th>
@@ -636,7 +672,7 @@ export default function MembersPage({
             <tbody>
               {paginated.length === 0 ? (
                 <tr>
-                  <td colSpan="10" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
                     No members found.
                   </td>
                 </tr>
@@ -644,15 +680,15 @@ export default function MembersPage({
                 paginated.map((member) => {
                   const memberIdStr = `MEM-${String(member.id).padStart(3, '0')}`;
                   const joinedDateStr = formatDisplayDate(member.joined, 'Not set');
-                  const renewalDateStr = formatDisplayDate(member.nextPaymentDue);
-                  const paymentStatus = (member.paymentStatus || 'Pending').toLowerCase();
+                  const derivedStatus = getDerivedMemberStatus(member, todayISO);
+                  const derivedStatusLabel = getDerivedMemberStatusLabel(member, todayISO);
                   const avatarMarkup = (
                     <div className="avatar">{member.avatar || getInitials(member.name)}</div>
                   );
 
                   return (
                     <tr key={member.id} className="member-row">
-                      <td className="col-checkbox">
+                      <td className="col-checkbox" data-label="Select">
                         <input
                           type="checkbox"
                           checked={selectedRowIds.includes(member.id)}
@@ -660,7 +696,7 @@ export default function MembersPage({
                           aria-label={`Select ${member.name}`}
                         />
                       </td>
-                      <td className="col-name">
+                      <td className="col-name" data-label="Name">
                         <div className="member-cell">
                           {avatarMarkup}
                           <span
@@ -676,29 +712,16 @@ export default function MembersPage({
                           </span>
                         </div>
                       </td>
-                      <td>{member.email}</td>
-                      <td>{memberIdStr}</td>
-                      <td>{member.plan}</td>
-                      <td>
-                        <span className={`status-badge ${isExpired(member) ? 'status-inactive' : isDueSoon(member) ? 'status-pending' : 'status-active'}`}>
-                          {renewalDateStr}
+                      <td data-label="Email">{member.email}</td>
+                      <td data-label="Membership ID">{memberIdStr}</td>
+                      <td data-label="Membership Type">{member.plan}</td>
+                      <td data-label="Join Date">{joinedDateStr}</td>
+                      <td data-label="Status">
+                        <span className={`status-badge status-${derivedStatus}`}>
+                          {derivedStatusLabel}
                         </span>
                       </td>
-                      <td>
-                        <div className="payment-summary-cell">
-                          <strong className={paymentStatus === 'paid' ? 'payment-ok' : 'payment-attention'}>
-                            {member.paymentStatus || 'Pending'}
-                          </strong>
-                          <small>{formatPaymentMethod(member.paymentMethod)}</small>
-                        </div>
-                      </td>
-                      <td>{joinedDateStr}</td>
-                      <td>
-                        <span className={`status-badge status-${member.status}`}>
-                          {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
-                        </span>
-                      </td>
-                      <td>
+                      <td data-label="Actions">
                         <div className="action-group">
                           <button
                             onClick={() => triggerEditModal(member)}
@@ -730,7 +753,7 @@ export default function MembersPage({
           <div className="pagination-footer">
             <div className="pagination-info">
               <span>
-                Showing {startIdx + 1}-{endIdx} of {totalMatches} members
+                Showing {startIdx + 1}-{endIdx} of {totalMatches} members - Page {activeCurrentPage} of {totalPages}
               </span>
               <label htmlFor="pageSize" className="rows-per-page">
                 <span>Rows per page</span>
@@ -801,13 +824,25 @@ export default function MembersPage({
                     <option value="Full Month">Full Month - PHP 400</option>
                   </select>
                 </label>
+                {modalMode === 'add' && (
+                  <label>
+                    <span>Start Date *</span>
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+                    <small className="renewal-date-preview">
+                      Membership expires on {formatDisplayDate(calculateMembershipExpiry(startDate, plan), 'Select a start date')}
+                    </small>
+                  </label>
+                )}
                 <label>
                   <span>Status</span>
                   <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                    <option value="active">Active</option>
+                    <option value="active" disabled={modalMode === 'edit' && editingMemberLocked}>Active</option>
                     <option value="pending">Pending</option>
                     <option value="inactive">Inactive</option>
                   </select>
+                  {modalMode === 'edit' && editingMemberLocked && (
+                    <small className="field-help field-help-danger">Record a new payment to reactivate this member.</small>
+                  )}
                 </label>
                 <label>
                   <span>Emergency Contact Name</span>
@@ -844,14 +879,33 @@ export default function MembersPage({
           <div className="modal-card confirm-card">
             <h3>Delete member?</h3>
             <p>
-              This action cannot be undone. <strong>{memberToDelete?.name}</strong> will be permanently removed from the records.
+              <strong>{memberToDelete?.name}</strong> will be permanently removed from member records. Existing payment history will be retained for reports.
             </p>
             <div className="modal-actions" style={{ justifyContent: 'center' }}>
               <button type="button" onClick={() => setIsDeleteOpen(false)} className="secondary-btn">
                 Cancel
               </button>
               <button onClick={handleDeleteConfirm} type="button" className="delete-btn" style={{ border: 0, padding: '10px 18px', borderRadius: '12px', cursor: 'pointer', background: '#ef4444', color: 'white' }}>
-                Delete
+                Delete member
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isBulkDeleteOpen && (
+        <div className="modal" aria-hidden="false">
+          <div className="modal-card confirm-card">
+            <h3>Delete selected members?</h3>
+            <p>
+              <strong>{selectedRowIds.length}</strong> selected member{selectedRowIds.length === 1 ? '' : 's'} will be permanently removed. Existing payment history will be retained for reports.
+            </p>
+            <div className="modal-actions" style={{ justifyContent: 'center' }}>
+              <button type="button" onClick={() => setIsBulkDeleteOpen(false)} className="secondary-btn">
+                Cancel
+              </button>
+              <button onClick={handleBulkDeleteConfirm} type="button" className="delete-btn" style={{ border: 0, padding: '10px 18px', borderRadius: '12px', cursor: 'pointer', background: '#ef4444', color: 'white' }}>
+                Delete selected
               </button>
             </div>
           </div>

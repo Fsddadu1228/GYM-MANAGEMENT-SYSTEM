@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { GymContext } from './GymContextObject';
 import { formatPHP, toLocalISODate } from '../utils/formatters';
 import defaultData from '../data/defaultData.json';
+import { hasUnresolvedOverduePayment } from '../utils/paymentStatus';
 
 const API_BASE = '/api';
 
@@ -51,7 +52,7 @@ function getPlanBillingCycle(plan = '') {
     return { label: 'half month', days: 15 };
   }
   if (/\b(full|full\s*month|month|monthly)\b/.test(normalizedPlan)) {
-    return { label: 'full month', months: 1 };
+    return { label: 'full month', days: 30 };
   }
   if (/\b(week|weekly)\b/.test(normalizedPlan)) {
     return { label: 'weekly', days: 7 };
@@ -136,6 +137,40 @@ function readStoredList(key, fallback) {
   }
 }
 
+function normalizeOfflinePayments(payments) {
+  const todayISO = toLocalISODate();
+  return payments.map((payment) => {
+    const dueISO = payment.coverageEnd || payment.due || '';
+    if (payment.status === 'pending' && dueISO && dueISO < todayISO) {
+      return { ...payment, status: 'overdue' };
+    }
+    return payment;
+  });
+}
+
+function SystemLoadingState() {
+  return (
+    <div className="system-loading-shell" aria-label="Loading gym records" aria-busy="true">
+      <aside className="system-loading-sidebar">
+        <span className="skeleton-block skeleton-brand" />
+        <span className="skeleton-block skeleton-nav" />
+        <span className="skeleton-block skeleton-nav" />
+        <span className="skeleton-block skeleton-nav" />
+        <span className="skeleton-block skeleton-nav" />
+      </aside>
+      <main className="system-loading-main">
+        <span className="skeleton-block skeleton-title" />
+        <div className="system-loading-kpis">
+          {Array.from({ length: 4 }, (_, index) => (
+            <span key={index} className="skeleton-block skeleton-kpi" />
+          ))}
+        </div>
+        <span className="skeleton-block skeleton-panel" />
+      </main>
+    </div>
+  );
+}
+
 export const GymProvider = ({ children, authToken, currentUser }) => {
   const [members, setMembers] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -161,7 +196,7 @@ export const GymProvider = ({ children, authToken, currentUser }) => {
         console.warn('API unavailable, using local storage fallback:', err.message);
 
         const storedMembers = readStoredList('gym_members', DEFAULT_MEMBERS);
-        const storedPayments = readStoredList('gym_payments', DEFAULT_PAYMENTS);
+        const storedPayments = normalizeOfflinePayments(readStoredList('gym_payments', DEFAULT_PAYMENTS));
 
         localStorage.setItem('gym_members', JSON.stringify(storedMembers));
         localStorage.setItem('gym_payments', JSON.stringify(storedPayments));
@@ -200,18 +235,18 @@ export const GymProvider = ({ children, authToken, currentUser }) => {
   // CRUD Operations
   const addMember = async (memberData) => {
     const nextId = members.length > 0 ? Math.max(...members.map(m => m.id)) + 1 : 1;
-    const todayStr = toLocalISODate();
+    const startDate = memberData.joined || toLocalISODate();
     const newMember = {
       id: nextId,
       ...memberData,
-      joined: todayStr,
+      joined: startDate,
       avatar: getInitials(memberData.name),
       fee: getPlanFee(memberData.plan),
       visitThisMonth: 0,
       totalVisits: 0,
       lastVisit: '-',
       attendanceRate: '0%',
-      nextPaymentDue: getNextPaymentDue(todayStr, memberData.plan),
+      nextPaymentDue: getNextPaymentDue(startDate, memberData.plan),
       paymentMethod: 'Cash',
       lastPayment: '-',
       paymentStatus: memberData.status === 'active' ? 'Paid' : 'Pending'
@@ -235,16 +270,20 @@ export const GymProvider = ({ children, authToken, currentUser }) => {
     return newMember;
   };
 
-  const updateMember = async (id, updatedFields) => {
+  const updateMember = async (id, updatedFields, { paymentJustRecorded = false } = {}) => {
     const existingMember = members.find((m) => m.id === id);
+    const lockedByOverdue = !paymentJustRecorded && updatedFields.status === 'active' && hasUnresolvedOverduePayment(id, payments);
+    const safeUpdatedFields = lockedByOverdue
+      ? { ...updatedFields, status: 'inactive', paymentStatus: 'Overdue' }
+      : updatedFields;
     const shouldRenamePayments = Boolean(
-      updatedFields.name &&
+      safeUpdatedFields.name &&
       existingMember &&
-      updatedFields.name !== existingMember.name
+      safeUpdatedFields.name !== existingMember.name
     );
     const newList = members.map((m) => {
       if (m.id === id) {
-        const merged = { ...m, ...updatedFields };
+        const merged = { ...m, ...safeUpdatedFields };
         merged.avatar = getInitials(merged.name);
         merged.fee = getPlanFee(merged.plan);
         return merged;
@@ -294,9 +333,57 @@ export const GymProvider = ({ children, authToken, currentUser }) => {
       }
     }
 
-    const newList = members.filter(m => m.id !== id);
+    const newList = members.filter((member) => member.id !== id);
     updateMembersList(newList);
-    // Optionally clean up payments as well, but standard behavior keeps financial history
+    return true;
+  };
+
+  const bulkUpdateMemberStatus = async (ids, nextStatus) => {
+    const targetIds = new Set(ids);
+    const updatedList = members.map((member) => {
+      if (!targetIds.has(member.id)) return member;
+      const lockedByOverdue = nextStatus === 'active' && hasUnresolvedOverduePayment(member.id, payments);
+      return lockedByOverdue
+        ? { ...member, status: 'inactive', paymentStatus: 'Overdue' }
+        : { ...member, status: nextStatus };
+    });
+
+    if (useApiRef.current) {
+      try {
+        await Promise.all(
+          members
+            .filter((member) => targetIds.has(member.id))
+            .map((member) => requestJson(`/members/${member.id}`, authToken, {
+              method: 'PUT',
+              body: JSON.stringify({ status: nextStatus })
+            }))
+        );
+      } catch (err) {
+        console.error('Failed to update selected members:', err);
+        return false;
+      }
+    }
+
+    updateMembersList(updatedList);
+    return true;
+  };
+
+  const bulkDeleteMembers = async (ids) => {
+    if (currentUser?.role !== 'admin') return false;
+    const targetIds = new Set(ids);
+
+    if (useApiRef.current) {
+      try {
+        await Promise.all(
+          ids.map((id) => requestJson(`/members/${id}`, authToken, { method: 'DELETE' }))
+        );
+      } catch (err) {
+        console.error('Failed to delete selected members:', err);
+        return false;
+      }
+    }
+
+    updateMembersList(members.filter((member) => !targetIds.has(member.id)));
     return true;
   };
 
@@ -310,8 +397,9 @@ export const GymProvider = ({ children, authToken, currentUser }) => {
       paymentMethod: payment.method,
       lastPayment: `${formatPHP(payment.amount)} on ${payment.paid}`,
       paymentStatus: 'Paid',
+      status: 'active',
       nextPaymentDue
-    });
+    }, { paymentJustRecorded: true });
   };
 
   const recordPayment = async (paymentData) => {
@@ -346,6 +434,9 @@ export const GymProvider = ({ children, authToken, currentUser }) => {
   };
 
   const updatePayment = async (id, updatedFields) => {
+    const existingPayment = payments.find((payment) => payment.id === id);
+    if (existingPayment?.status === 'paid') return null;
+
     const newList = payments.map((p) => {
       if (p.id === id) {
         const selectedMember = members.find((m) => m.id === updatedFields.memberId) || members.find((m) => m.name === updatedFields.member);
@@ -401,11 +492,13 @@ export const GymProvider = ({ children, authToken, currentUser }) => {
       addMember,
       updateMember,
       deleteMember,
+      bulkUpdateMemberStatus,
+      bulkDeleteMembers,
       recordPayment,
       updatePayment,
       deletePayment
     }}>
-      {!loading && children}
+      {loading ? <SystemLoadingState /> : children}
     </GymContext.Provider>
   );
 };

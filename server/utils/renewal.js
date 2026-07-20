@@ -27,7 +27,7 @@ function getPlanBillingCycle(plan = '') {
 
   if (/\b(day|daily)\b/.test(normalizedPlan)) return { label: 'daily', days: 1 };
   if (/\b(half|half\s*month|15\s*day)\b/.test(normalizedPlan)) return { label: 'half month', days: 15 };
-  if (/\b(full|full\s*month|month|monthly)\b/.test(normalizedPlan)) return { label: 'full month', months: 1 };
+  if (/\b(full|full\s*month|month|monthly)\b/.test(normalizedPlan)) return { label: 'full month', days: 30 };
   if (/\b(week|weekly)\b/.test(normalizedPlan)) return { label: 'weekly', days: 7 };
   if (/\b(quarter|quarterly|3\s*month)\b/.test(normalizedPlan)) return { label: 'quarterly', months: 3 };
   if (/\b(semiannual|semi-annual|6\s*month)\b/.test(normalizedPlan)) return { label: 'semiannual', months: 6 };
